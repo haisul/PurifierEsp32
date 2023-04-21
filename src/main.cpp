@@ -1,6 +1,7 @@
 #include "HmiConnect.h"
 #include "funcControl.h"
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <WiFi.h>
 /////////////////////////////////////////////
 #include <AsyncMqttClient.h>
@@ -125,46 +126,57 @@ void MCUcommender(String target) {
 }
 
 void clock(void *pvParam) {
-    String timeBuff;
+    String allTimerBuff, purTimerBuff, fogTimerBuff, uvcTimerBuff;
+    StaticJsonDocument<384> j_timer;
+    String timerStr;
     while (1) {
         if (function.all.startingCount) {
-            timeBuff = String(function.all.endEpoch - function.rtc.getEpoch());
-            HMI.sendMessage("settime.all_countTime.val=" + timeBuff);
-            HMI.sendMessage("AdminDeveloper.n0.val=" + timeBuff);
-            MqttSendMessage(toAppFunctionCount, "all_countTime:" + timeBuff);
-            if (timeBuff == "0")
+            allTimerBuff = String(function.all.endEpoch - function.rtc.getEpoch());
+            HMI.sendMessage("settime.all_countTime.val=" + allTimerBuff);
+            HMI.sendMessage("AdminDeveloper.n0.val=" + allTimerBuff);
+            if (allTimerBuff == "0")
                 function.funcState(ALL, OFF, true);
         }
         if (function.pur.startingCount && !function.all.startingCount) {
-            timeBuff = String(function.pur.endEpoch - function.rtc.getEpoch());
-            HMI.sendMessage("settime.pur_countTime.val=" + timeBuff);
-            HMI.sendMessage("AdminDeveloper.n1.val=" + timeBuff);
-            MqttSendMessage(toAppFunctionCount, "pur_countTime:" + timeBuff);
-            if (timeBuff == "0")
+            purTimerBuff = String(function.pur.endEpoch - function.rtc.getEpoch());
+            HMI.sendMessage("settime.pur_countTime.val=" + purTimerBuff);
+            HMI.sendMessage("AdminDeveloper.n1.val=" + purTimerBuff);
+            if (purTimerBuff == "0")
                 function.funcState(PUR, OFF, true);
         }
         if (function.fog.startingCount && !function.all.startingCount) {
-            timeBuff = String(function.fog.endEpoch - function.rtc.getEpoch());
-            HMI.sendMessage("settime.fog_countTime.val=" + timeBuff);
-            HMI.sendMessage("AdminDeveloper.n3.val=" + timeBuff);
-            MqttSendMessage(toAppFunctionCount, "fog_countTime:" + timeBuff);
-            if (timeBuff == "0")
+            fogTimerBuff = String(function.fog.endEpoch - function.rtc.getEpoch());
+            HMI.sendMessage("settime.fog_countTime.val=" + fogTimerBuff);
+            HMI.sendMessage("AdminDeveloper.n3.val=" + fogTimerBuff);
+            if (fogTimerBuff == "0")
                 function.funcState(FOG, OFF, true);
         }
         if (function.uvc.startingCount && !function.all.startingCount) {
-            timeBuff = String(function.uvc.endEpoch - function.rtc.getEpoch());
-            HMI.sendMessage("settime.uvc_countTime.val=" + timeBuff);
-            HMI.sendMessage("AdminDeveloper.n4.val=" + timeBuff);
-            MqttSendMessage(toAppFunctionCount, "uvc_countTime:" + timeBuff);
-            if (timeBuff == "0")
+            uvcTimerBuff = String(function.uvc.endEpoch - function.rtc.getEpoch());
+            HMI.sendMessage("settime.uvc_countTime.val=" + uvcTimerBuff);
+            HMI.sendMessage("AdminDeveloper.n4.val=" + uvcTimerBuff);
+            if (uvcTimerBuff == "0")
                 function.funcState(UVC, OFF, true);
         }
+        if (function.all.startingCount || function.pur.startingCount || function.fog.startingCount || function.uvc.startingCount) {
+
+            j_timer["allCountTime"] = allTimerBuff;
+            j_timer["purCountTime"] = purTimerBuff;
+            j_timer["fogCountTime"] = fogTimerBuff;
+            j_timer["uvcCountTime"] = uvcTimerBuff;
+
+            serializeJson(j_timer, timerStr);
+            MqttSendMessage(toAppFunctionCount, timerStr);
+        }
+
         vTaskDelay(1000);
     }
 }
 
 void dust(void *pvParam) {
     String dustVal = "0", tempVal = "0", rhumVal = "0";
+    StaticJsonDocument<384> j_pms;
+    String pmsStr;
     while (1) {
         pms.read();
         dustVal = pms.pm25;
@@ -182,9 +194,13 @@ void dust(void *pvParam) {
             HMI.sendMessage("home.pm25.txt=\"" + dustVal + "\"");
             HMI.sendMessage("home.temp.txt=\"" + tempVal + "\"");
             HMI.sendMessage("home.rhum.txt=\"" + rhumVal + "\"");
-            MqttSendMessage(toAppFunctionSensor, "pms_dustVal:" + dustVal);
-            MqttSendMessage(toAppFunctionSensor, "pms_tempVal:" + tempVal);
-            MqttSendMessage(toAppFunctionSensor, "pms_rhumVal:" + rhumVal);
+
+            j_pms["pm25"] = rhumVal;
+            j_pms["temp"] = tempVal;
+            j_pms["rhum"] = rhumVal;
+
+            serializeJson(j_pms, pmsStr);
+            MqttSendMessage(toAppFunctionCount, pmsStr);
         }
         vTaskDelay(3000);
     }

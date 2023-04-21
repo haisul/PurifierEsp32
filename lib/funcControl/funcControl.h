@@ -38,9 +38,12 @@ private:
     byte fogpump = 12;
     byte fogfan = 14;
     byte fogMachine = 32;
-    byte ecin = 25;
-    byte ecout = 26;
-    byte ecswitch = 27;
+    /// pin25、26、27改為pin26、27輸出訊號至L298N ///
+    // byte ecin = 25;
+    // byte ecout = 26;
+    // byte ecswitch = 27;
+    byte ecin = 26;
+    byte ecout = 27;
     byte uvLamp = 22;
     byte purifier = 33;
     byte PWMpin = 4;

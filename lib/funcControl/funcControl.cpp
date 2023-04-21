@@ -8,9 +8,8 @@ funcControl::funcControl() {
     pinMode(fogpump, OUTPUT);    // Relay1-8 fog Pump
     pinMode(fogfan, OUTPUT);     // Relay1-7 fog Fan
     pinMode(fogMachine, OUTPUT); // Relay2-2 fog Machine
-    pinMode(ecin, OUTPUT);       // Relay1-4 ec Direction
-    pinMode(ecout, OUTPUT);      // Relay1-5 ec Direction
-    pinMode(ecswitch, OUTPUT);   // Relay1-6 ec Switch
+    pinMode(ecin, OUTPUT);       // L298NA-IN1 ec Direction
+    pinMode(ecout, OUTPUT);      // L298NA-IN2 ec Direction
     pinMode(uvLamp, OUTPUT);     // Relay1-1 uv Lamp
     pinMode(purifier, OUTPUT);   // Relay2-1 purifier Fan
     pinMode(PWMpin, OUTPUT);     // purifier fan PWMpin
@@ -20,7 +19,6 @@ funcControl::funcControl() {
     digitalWrite(fogMachine, LOW);
     digitalWrite(ecin, LOW);
     digitalWrite(ecout, LOW);
-    digitalWrite(ecswitch, LOW);
     digitalWrite(uvLamp, LOW);
     digitalWrite(purifier, LOW);
 
@@ -138,15 +136,11 @@ void funcControl::funcState(function_mode_types mode_types, bool state, bool pub
             break;
         case UVC:
             if (!uvc.state) {
-                digitalWrite(uvLamp, HIGH);
-                digitalWrite(ecswitch, LOW);
-                vTaskDelay(250);
-                digitalWrite(ecin, HIGH);
+                digitalWrite(ecin, LOW);
+                digitalWrite(ecout, LOW);
                 digitalWrite(ecout, HIGH);
-                vTaskDelay(250);
-                digitalWrite(ecswitch, HIGH);
-                vTaskDelay(5500);
-                digitalWrite(ecswitch, LOW);
+                vTaskDelay(6000);
+                digitalWrite(ecout, LOW);
                 uvc.state = true;
                 Serial.printf("uvc.state:ON\n");
             }
@@ -188,15 +182,11 @@ void funcControl::funcState(function_mode_types mode_types, bool state, bool pub
             break;
         case UVC:
             if (uvc.state) {
-                digitalWrite(uvLamp, LOW);
-                digitalWrite(ecswitch, LOW);
-                vTaskDelay(250);
                 digitalWrite(ecin, LOW);
                 digitalWrite(ecout, LOW);
-                vTaskDelay(250);
-                digitalWrite(ecswitch, HIGH);
-                vTaskDelay(5500);
-                digitalWrite(ecswitch, LOW);
+                digitalWrite(ecin, HIGH);
+                vTaskDelay(6000);
+                digitalWrite(ecin, LOW);
                 uvc.state = false;
                 Serial.printf("uvc.state:OFF\n");
             }
@@ -510,23 +500,17 @@ void funcControl::devMode(String set, bool state) {
             digitalWrite(uvLamp, LOW);
     } else if (set == "ec") {
         if (state) {
-            digitalWrite(ecswitch, LOW);
-            vTaskDelay(100);
-            digitalWrite(ecin, HIGH);
-            digitalWrite(ecout, HIGH);
-            vTaskDelay(100);
-            digitalWrite(ecswitch, HIGH);
-            vTaskDelay(500);
-            digitalWrite(ecswitch, LOW);
-        } else {
-            digitalWrite(ecswitch, LOW);
-            vTaskDelay(100);
             digitalWrite(ecin, LOW);
             digitalWrite(ecout, LOW);
-            vTaskDelay(100);
-            digitalWrite(ecswitch, HIGH);
+            digitalWrite(ecout, HIGH);
             vTaskDelay(500);
-            digitalWrite(ecswitch, LOW);
+            digitalWrite(ecout, LOW);
+        } else {
+            digitalWrite(ecin, LOW);
+            digitalWrite(ecout, LOW);
+            digitalWrite(ecin, HIGH);
+            vTaskDelay(500);
+            digitalWrite(ecin, LOW);
         }
     } else if (set == "fog") {
         if (state)
