@@ -1,29 +1,37 @@
 #include "HmiConnect.h"
 #include "funcControl.h"
+#include "littlefsfun.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
 /////////////////////////////////////////////
-#include <AsyncMqttClient.h>
+const String serialNum = "$202304280142";
+/////////////////////////////////////////////
+#include <AsyncMQTT_ESP32.h>
 #include <Ticker.h>
+#include <WiFiClientSecure.h>
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttTimer;
-// TimerHandle_t wifiTimer;
+WiFiClientSecure secureClient;
 int wifiReconnectCount = 0;
 int mqttReconnectCount = 0;
 bool isWifiDisconnectCreated = false;
 bool isWifiSmartConfigCreated = false;
+const char *ca_cert;
 //////////////////////////////////////////////
-#include <AsyncElegantOTA.h>
+//#include <AsyncElegantOTA.h>
 #include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-AsyncWebServer server(80);
+//#include <ESPAsyncWebServer.h>
+//AsyncWebServer server(80);
 //////////////////////////////////////////////
 #include <PMserial.h>
 HardwareSerial pmsSerial(1);
 SerialPM pms(PMS5003, 5, 18);
 //////////////////////////////////////////////
 #define LEDpin 2
+//////////////////////////////////////////////
+const byte powerSignal = 34;
+const byte powerSupply = 25;
 //////////////////////////////////////////////
 HmiConnect HMI(Serial2, 9600);
 funcControl function;
@@ -32,18 +40,10 @@ bool isTaskCreated = false;
 const char *ssid = "";
 const char *pass = "";
 
-#define MQTT_HOST "broker.emqx.io"
-#define MQTT_PORT 1883
-#define MQTT_USERNAME "LJ"
+#define MQTT_HOST "ya0e11c3.ala.us-east-1.emqxsl.com"
+#define MQTT_PORT 8883
+#define MQTT_USERNAME "LJ_IEP"
 #define MQTT_PASSWORD "33456789"
-
-const char *toAppFunction = "LJ/ex2252/EspCommend/Function";
-const char *toAppFunctionSensor = "LJ/ex2252/EspCommend/Function/Seneor";
-const char *toAppFunctionCount = "LJ/ex2252/EspCommend/Function/Count";
-const char *toAppFunctionFunc = "LJ/ex2252/EspCommend/Function/Func";
-const char *toAppSystem = "LJ/ex2252/EspCommend/System";
-const char *fromAppFunction = "LJ/ex2252/AppCommend/Function";
-const char *fromAppSystem = "LJ/ex2252/AppCommend/System";
 
 void smartConfig(void *pvParam);
 void MqttSendMessage(const char *, String);
@@ -111,18 +111,18 @@ void MCUcommender(String target) {
         HMI.sendMessage("AdminJson.Json.txt=" + temp);
     }
     if (target == "MQTT" || target == "")
-        MqttSendMessage(toAppFunctionFunc, function.getInitialJson());
+        // MqttSendMessage(toAppFunctionFunc, function.getInitialJson());
 
-    if (target == "wifion" || target == "wifiInfo") {
-        isWifiDisconnectCreated = false;
-        connectToWifi();
-    } else if (target == "wifioff") {
-        isWifiDisconnectCreated = true;
-        WiFi.disconnect(true);
-    } else if (target == "wifiConfig") {
-        if (!isWifiSmartConfigCreated)
-            xTaskCreatePinnedToCore(smartConfig, "smartConfig", 1024, NULL, 1, NULL, 0);
-    }
+        if (target == "wifion" || target == "wifiInfo") {
+            isWifiDisconnectCreated = false;
+            connectToWifi();
+        } else if (target == "wifioff") {
+            isWifiDisconnectCreated = true;
+            WiFi.disconnect(true);
+        } else if (target == "wifiConfig") {
+            if (!isWifiSmartConfigCreated)
+                xTaskCreatePinnedToCore(smartConfig, "smartConfig", 1024, NULL, 1, NULL, 0);
+        }
 }
 
 void clock(void *pvParam) {
@@ -166,7 +166,7 @@ void clock(void *pvParam) {
             j_timer["uvcCountTime"] = uvcTimerBuff;
 
             serializeJson(j_timer, timerStr);
-            MqttSendMessage(toAppFunctionCount, timerStr);
+            // MqttSendMessage(toAppFunctionCount, timerStr);
         }
 
         vTaskDelay(1000);
@@ -200,7 +200,7 @@ void dust(void *pvParam) {
             j_pms["rhum"] = rhumVal;
 
             serializeJson(j_pms, pmsStr);
-            MqttSendMessage(toAppFunctionCount, pmsStr);
+            // MqttSendMessage(toAppFunctionCount, pmsStr);
         }
         vTaskDelay(3000);
     }
@@ -235,11 +235,10 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
 
 void onMqttConnect(bool sessionPresent) {
     Serial.printf("Connected to MQTT.\n");
-    mqttClient.subscribe(fromAppFunction, 2);
-    mqttClient.subscribe(fromAppSystem, 2);
-    mqttClient.subscribe("LJ/test", 2);
-    MqttSendMessage(toAppSystem, "onESP32");
-    MqttSendMessage(toAppFunctionFunc, function.getInitialJson());
+
+    // mqttClient.subscribe("LJ/test", 2);
+    // MqttSendMessage(toAppSystem, "onESP32");
+    // MqttSendMessage(toAppFunctionFunc, function.getInitialJson());
     mqttReconnectCount = 0;
 }
 
@@ -249,19 +248,19 @@ void MqttCallback(char *topic, char *payload, AsyncMqttClientMessageProperties p
         mqtt_msg += (char)payload[i];
     }
     if (mqtt_msg == "onFlutter") {
-        MqttSendMessage(toAppSystem, "esp32 receive");
+        // MqttSendMessage(toAppSystem, "esp32 receive");
         function.refresh("MQTT");
-        MqttSendMessage(toAppSystem, "complete");
+        // MqttSendMessage(toAppSystem, "complete");
     } else
         msgProcess("MQTT", mqtt_msg, topic);
 }
 
 void MqttSendMessage(const char *target_topic, String msg) {
     msg = "#" + msg;
-    if (target_topic == toAppSystem || target_topic == toAppFunctionFunc)
+    /*if (target_topic == toAppSystem || target_topic == toAppFunctionFunc)
         mqttClient.publish(target_topic, 2, false, msg.c_str());
     else
-        mqttClient.publish(target_topic, 0, false, msg.c_str());
+        mqttClient.publish(target_topic, 0, false, msg.c_str());*/
 }
 
 // WIFI Setting
@@ -297,14 +296,14 @@ void smartConfig(void *pvParam) {
     vTaskDelete(NULL);
 }
 
-void OTAServer() {
+/*void OTAServer() {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "text/plain", "The ESP32.");
     });
     AsyncElegantOTA.begin(&server); // Start ElegantOTA
     server.begin();
     Serial.printf("OTA Server Start!\n");
-}
+}*/
 
 void WiFiEvent(WiFiEvent_t event) {
     Serial.printf("\n[WiFi-event] event: %d\n", event);
@@ -317,7 +316,7 @@ void WiFiEvent(WiFiEvent_t event) {
         HMI.sendMessage("AdminSerial.serialTemp.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
         Serial.printf("%s\n", function.getWifiInfo().c_str());
         connectToMqtt();
-        OTAServer();
+        //OTAServer();
         WiFi.stopSmartConfig();
         wifiReconnectCount = 0;
         break;
@@ -330,20 +329,84 @@ void WiFiEvent(WiFiEvent_t event) {
     }
 }
 
+void buttonInterrupt(void *Param) {
+    int buttonState = analogRead(powerSignal);
+    bool POWER_ON = false;
+    static int jumpTime = millis();
+    static int currentTime = millis();
+
+    while (1) {
+        buttonState = analogRead(powerSignal);
+        if (buttonState > 4000) {
+            if (millis() - jumpTime > 1000) {
+                POWER_ON = !POWER_ON;
+                if (POWER_ON) {
+                    HMI.sendMessage("sleep=0");
+                    HMI.sendMessage("thup=1");
+                    Serial.println("ON");
+                    digitalWrite(powerSupply, HIGH);
+                } else {
+                    HMI.sendMessage("thup=0");
+                    HMI.sendMessage("sleep=1");
+                    if (function.all.state)
+                        function.commend("all", "state", "off");
+                    if (function.pur.state)
+                        function.commend("pur", "state", "off");
+                    if (function.fog.state)
+                        function.commend("fog", "state", "off");
+                    if (function.uvc.state)
+                        function.commend("uvc", "state", "off");
+                    digitalWrite(powerSupply, LOW);
+                    Serial.println("OFF");
+                }
+                jumpTime = millis();
+            }
+        }
+
+        if (function.all.state || function.pur.state || function.fog.state || function.uvc.state) {
+            currentTime = millis();
+        }
+        if (millis() - currentTime > 300 * 1000 && POWER_ON) {
+            POWER_ON = false;
+            HMI.sendMessage("sleep=1");
+            digitalWrite(powerSupply, LOW);
+            Serial.println("OFF");
+        }
+
+        vTaskDelay(10);
+    }
+}
+
+void loadCertFile() {
+    if (!initLittleFS()) {
+        Serial.printf("initial LittleFS Failed!\n");
+        return;
+    } else {
+        ca_cert = readFile(LittleFS, "/emqxsl-ca.crt").c_str();
+        Serial.println(ca_cert);
+    }
+}
+
 void setup() {
+
     Serial.begin(115200);
     pinMode(LEDpin, OUTPUT);
     pmsSerial.begin(9600, SERIAL_8E1, 5, 18);
     pms.init();
     ///////////////////////////////////////
+    pinMode(powerSignal, INPUT_PULLDOWN); //
+    pinMode(powerSupply, OUTPUT);         //
+    // attachInterrupt(digitalPinToInterrupt(powerSignal), buttonInterrupt, RISING);
+    ///////////////////////////////////////
     WiFi.mode(WIFI_AP_STA);
     WiFi.onEvent(WiFiEvent);
-    // WiFi.beginSmartConfig();
     mqttTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(4000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
-    // wifiTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(4000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWifi));
 
+    loadCertFile();
+    secureClient.setCACert(ca_cert);
     mqttClient.setCredentials(MQTT_USERNAME, MQTT_PASSWORD);
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+    mqttClient.setSecure(secureClient);
     mqttClient.onConnect(onMqttConnect);
     mqttClient.onDisconnect(onMqttDisconnect);
     mqttClient.onMessage(MqttCallback);
@@ -359,6 +422,7 @@ void setup() {
     xTaskCreatePinnedToCore(clock, "CLOCK", 4096, NULL, 1, NULL, 0); // 2220 bytes
     xTaskCreatePinnedToCore(dust, "DUST", 4096, NULL, 1, NULL, 0);   // 2384 bytes
     xTaskCreatePinnedToCore(local, "LOCAL", 8192, NULL, 2, NULL, 1); // 5352 bytes
+    xTaskCreatePinnedToCore(buttonInterrupt, "buttonTask", 4096, NULL, 1, NULL, 1);
 }
 
 void loop() {

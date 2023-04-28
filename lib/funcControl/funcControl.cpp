@@ -2,7 +2,7 @@
 #include "Arduino.h"
 #include "littlefsfun.h"
 #include <ArduinoJson.h>
-#include <SPIFFS.h>
+// #include <SPIFFS.h>
 
 funcControl::funcControl() {
     pinMode(fogpump, OUTPUT);    // Relay1-8 fog Pump
@@ -138,6 +138,7 @@ void funcControl::funcState(function_mode_types mode_types, bool state, bool pub
             if (!uvc.state) {
                 digitalWrite(ecin, LOW);
                 digitalWrite(ecout, LOW);
+                digitalWrite(uvLamp, HIGH);
                 digitalWrite(ecout, HIGH);
                 vTaskDelay(6000);
                 digitalWrite(ecout, LOW);
@@ -184,6 +185,7 @@ void funcControl::funcState(function_mode_types mode_types, bool state, bool pub
             if (uvc.state) {
                 digitalWrite(ecin, LOW);
                 digitalWrite(ecout, LOW);
+                digitalWrite(uvLamp, LOW);
                 digitalWrite(ecin, HIGH);
                 vTaskDelay(6000);
                 digitalWrite(ecin, LOW);
@@ -503,13 +505,13 @@ void funcControl::devMode(String set, bool state) {
             digitalWrite(ecin, LOW);
             digitalWrite(ecout, LOW);
             digitalWrite(ecout, HIGH);
-            vTaskDelay(500);
+            vTaskDelay(200);
             digitalWrite(ecout, LOW);
         } else {
             digitalWrite(ecin, LOW);
             digitalWrite(ecout, LOW);
             digitalWrite(ecin, HIGH);
-            vTaskDelay(500);
+            vTaskDelay(200);
             digitalWrite(ecin, LOW);
         }
     } else if (set == "fog") {

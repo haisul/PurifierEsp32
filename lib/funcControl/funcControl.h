@@ -35,20 +35,22 @@ typedef enum {
 
 class funcControl {
 private:
-    byte fogpump = 12;
-    byte fogfan = 14;
-    byte fogMachine = 32;
+    
+
+    const byte fogpump = 12;
+    const byte fogfan = 14;
+    const byte fogMachine = 32;
     /// pin25、26、27改為pin26、27輸出訊號至L298N ///
     // byte ecin = 25;
     // byte ecout = 26;
     // byte ecswitch = 27;
-    byte ecin = 26;
-    byte ecout = 27;
-    byte uvLamp = 22;
-    byte purifier = 33;
-    byte PWMpin = 4;
-    byte PWMchannel = 1;
-    byte resolution = 8;
+    const byte ecin = 26;
+    const byte ecout = 27;
+    const byte uvLamp = 22;
+    const byte purifier = 33;
+    const byte PWMpin = 4;
+    const byte PWMchannel = 1;
+    const byte resolution = 8;
     short _freq = 3000;
     short _dutycycle = 30;
     short _dust = 0;
@@ -72,8 +74,8 @@ private:
 public:
     ESP32Time rtc;
     int epoch = rtc.getEpoch();
-    String SSID = "";
-    String PASSWORD = "";
+    String SSID = "Haisul0912";
+    String PASSWORD = "33456789";
     bool _modeAuto = true, _modeSleep = false, _modeManual = false;
 
     funcControl();
