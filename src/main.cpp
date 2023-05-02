@@ -17,6 +17,7 @@ int wifiReconnectCount = 0;
 int mqttReconnectCount = 0;
 bool isWifiDisconnectCreated = false;
 bool isWifiSmartConfigCreated = false;
+bool isCompaire = false;
 // const char *ca_cert;
 //////////////////////////////////////////////
 // #include <AsyncElegantOTA.h>
@@ -244,7 +245,25 @@ void onMqttConnect(void *pvParam) {
             mqttClient.disconnect();
             vTaskDelete(NULL);
         }
+        if (isCompaire) {
+            if (mqttClient.subscribe(function.SSID, 0)) {
+                Serial.println("Subscribed to topic successfully!");
+                mqttClient.publish(function.SSID, serialNum);
+                isCompaire = false;
+            }
+        }
         vTaskDelay(10);
+    }
+}
+
+void devicePairing(String topic) {
+    while (1) {
+
+        if (mqttClient.subscribe(topic, 0)) {
+            Serial.println("Subscribed to topic successfully!");
+            mqttClient.publish(topic, serialNum);
+            break;
+        }
     }
 }
 
@@ -307,29 +326,24 @@ void wifiDisconnect(void *pvParam) {
     vTaskDelete(NULL);
 }
 
-void devicePairing(String topic) {
-    while (1) {
-
-        if (mqttClient.subscribe(topic, 0)) {
-            Serial.println("Subscribed to topic successfully!");
-            mqttClient.publish(topic, serialNum);
-            break;
-        }
-    }
-}
-
 void smartConfig(void *pvParam) {
     int smartConfigTime = millis();
     isWifiSmartConfigCreated = true;
     Serial.printf("SmartConfig %s !\n", WiFi.beginSmartConfig() ? "start" : "end");
     while (millis() - smartConfigTime < 120 * 1000) {
-        if (mqttClient.connected()) {
+        if (WiFi.smartConfigDone()) {
+            Serial.println("smartConfigDone");
+            isCompaire = true;
+            break;
+        }
+        /*if (mqttClient.connected()) {
+
             String pairingTopic;
             pairingTopic = function.SSID;
             devicePairing(pairingTopic);
 
             break;
-        }
+        }*/
         vTaskDelay(100);
     }
     WiFi.stopSmartConfig();
@@ -432,6 +446,7 @@ const char *loadCertFile() {
         }
         String cert = caFile.readString();
         caFile.close();
+        cert.remove(cert.length() - 1);
         const char *certPtr = cert.c_str();
         Serial.printf("certPtr: %s\n", certPtr);
         const char *ca_cert = "-----BEGIN CERTIFICATE-----\n"
@@ -456,6 +471,13 @@ const char *loadCertFile() {
                               "YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk\n"
                               "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n"
                               "-----END CERTIFICATE-----";
+        int j = 0;
+        for (int i = 0; i < strlen(certPtr); i++) {
+            if (certPtr[i] == '\n')
+                j++;
+        }
+        Serial.printf("j=%d\n", j);
+        Serial.printf("certPtr:%d ca_cert:%d\n", strlen(certPtr), strlen(ca_cert));
         Serial.printf("isSame: %s\n", ca_cert == certPtr ? "true" : "false");
         return ca_cert;
     }
