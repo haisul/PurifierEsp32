@@ -35,9 +35,7 @@ typedef enum {
 
 class funcControl {
 private:
-    
-
-    const byte fogpump = 12;
+        const byte fogpump = 12;
     const byte fogfan = 14;
     const byte fogMachine = 32;
     /// pin25、26、27改為pin26、27輸出訊號至L298N ///
@@ -74,8 +72,8 @@ private:
 public:
     ESP32Time rtc;
     int epoch = rtc.getEpoch();
-    String SSID = "Haisul0912";
-    String PASSWORD = "33456789";
+    String SSID = "";
+    String PASSWORD = "";
     bool _modeAuto = true, _modeSleep = false, _modeManual = false;
 
     funcControl();
