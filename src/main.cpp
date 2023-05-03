@@ -42,11 +42,12 @@ const char *pass = "";
 
 #define MQTT_HOST "ya0e11c3.ala.us-east-1.emqxsl.com"
 #define MQTT_PORT 8883
-#define MQTT_CLIENT_ID "LJ_IEP"
+#define MQTT_CLIENT_ID "mqtt_esp32"
 #define MQTT_USERNAME "LJ_IEP"
 #define MQTT_PASSWORD "33456789"
 
-void onMqttConnect(void *pvParam);
+String compaireTopic = "";
+
 void smartConfig(void *pvParam);
 void MqttSendMessage(String, String);
 void connectToWifi();
@@ -222,22 +223,30 @@ void local(void *pvParam) {
 // MQTT Setting
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
+void onMqttConnect(void *pvParam);
+void connectToMqtt(String SSID) {
 
-void connectToMqtt() {
-    Serial.println("Connecting to MQTT...");
     mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
-
-    while (!mqttClient.connected()) {
-        mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD);
+    Serial.printf("Connecting to MQTT...");
+    while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
         Serial.printf(".");
-        vTaskDelay(250);
+        vTaskDelay(500);
     }
-
-    Serial.println("mqtt connected!");
-    xTaskCreatePinnedToCore(onMqttConnect, "onMqttConnect", 4096, NULL, 1, NULL, 1);
+    Serial.println("");
+    Serial.println("MQTT is Connected!");
+    String *params = new String[2]{SSID, serialNum};
+    xTaskCreatePinnedToCore(onMqttConnect, "onMqttConnect", 8192, params, 1, NULL, 0);
+    // vTaskDelete(NULL);
 }
 
 void onMqttConnect(void *pvParam) {
+    String *params = (String *)pvParam;
+    String compaireTopic = params[0];
+    String serialNum = params[1];
+    Serial.printf("compaire Topic: ");
+    Serial.println(compaireTopic);
+    Serial.printf("serialNum: ");
+    Serial.println(serialNum);
 
     while (1) {
         mqttClient.loop();
@@ -246,17 +255,17 @@ void onMqttConnect(void *pvParam) {
             vTaskDelete(NULL);
         }
         if (isCompaire) {
-            if (mqttClient.subscribe(function.SSID, 0)) {
-                Serial.println("Subscribed to topic successfully!");
-                mqttClient.publish(function.SSID, serialNum);
-                isCompaire = false;
-            }
+            mqttClient.subscribe(compaireTopic);
+            Serial.printf("Subscribed to %s successfully!\n", compaireTopic.c_str());
+            mqttClient.publish(compaireTopic, serialNum);
+            Serial.println("publish to topic successfully!");
+            isCompaire = false;
         }
         vTaskDelay(10);
     }
 }
 
-void devicePairing(String topic) {
+/*void devicePairing(String topic) {
     while (1) {
 
         if (mqttClient.subscribe(topic, 0)) {
@@ -265,32 +274,39 @@ void devicePairing(String topic) {
             break;
         }
     }
-}
+}*/
 
 String topicApp;
-String topicEsp;
+String topicEsp, topicPms, topicTimer;
 
 void MqttCallback(String &topic, String &payload) {
     String mqttMsg = "";
     mqttMsg = payload;
-    if (topic == function.SSID) {
-        if (payload.startsWith("$userID:")) {
-            // MqttSendMessage(topic, serialNum);
-            mqttMsg.replace("$userID:", "");
-            topicApp = mqttMsg + "/" + serialNum + "/app";
-            topicEsp = mqttMsg + "/" + serialNum + "/esp";
-            mqttClient.subscribe(topicApp, 2);
-            MqttSendMessage(topic, "connected");
+    if (topic == compaireTopic) {
+        if (payload.startsWith("userID:")) {
+            mqttMsg.replace("userID:", "");
+            String serialNumTemp = serialNum;
+            serialNumTemp.replace("serialNum:", "");
+            topicApp = mqttMsg + "/" + serialNumTemp + "/app";
+            topicEsp = mqttMsg + "/" + serialNumTemp + "/esp";
+            topicPms = mqttMsg + "/" + serialNumTemp + "/pms";
+            topicTimer = mqttMsg + "/" + serialNumTemp + "/timer";
+            mqttClient.subscribe(topicApp);
+            mqttClient.publish(topic, "connected");
             mqttClient.unsubscribe(topic);
         }
     }
 
-    if (mqttMsg == "onFlutter") {
+    if (topic == topicApp) {
+        Serial.println(mqttMsg);
+    }
+
+    /*if (mqttMsg == "onFlutter") {
         // MqttSendMessage(toAppSystem, "esp32 receive");
         function.refresh("MQTT");
         // MqttSendMessage(toAppSystem, "complete");
     } else
-        msgProcess("MQTT", mqttMsg, topic);
+      msgProcess("MQTT", mqttMsg, topic);*/
 }
 
 void MqttSendMessage(String target_topic, String payload) {
@@ -331,25 +347,19 @@ void smartConfig(void *pvParam) {
     isWifiSmartConfigCreated = true;
     Serial.printf("SmartConfig %s !\n", WiFi.beginSmartConfig() ? "start" : "end");
     while (millis() - smartConfigTime < 120 * 1000) {
-        if (WiFi.smartConfigDone()) {
+        if (WiFi.isConnected()) {
             Serial.println("smartConfigDone");
             isCompaire = true;
             break;
         }
-        /*if (mqttClient.connected()) {
-
-            String pairingTopic;
-            pairingTopic = function.SSID;
-            devicePairing(pairingTopic);
-
-            break;
-        }*/
         vTaskDelay(100);
     }
+
     WiFi.stopSmartConfig();
     Serial.println("SmartConfig end!");
     isWifiSmartConfigCreated = false;
-
+    if (!isCompaire)
+        function.reset();
     vTaskDelete(NULL);
 }
 
@@ -372,9 +382,11 @@ void WiFiEvent(WiFiEvent_t event) {
         HMI.sendMessage("setwifi.wifiInfo.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
         HMI.sendMessage("AdminSerial.serialTemp.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
         Serial.printf("%s\n", function.getWifiInfo().c_str());
-        connectToMqtt();
+        // mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
+        connectToMqtt(WiFi.SSID());
+        compaireTopic = WiFi.SSID();
         // OTAServer();
-        WiFi.stopSmartConfig();
+        // WiFi.stopSmartConfig();
         wifiReconnectCount = 0;
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
@@ -448,7 +460,7 @@ const char *loadCertFile() {
         caFile.close();
         cert.remove(cert.length() - 1);
         const char *certPtr = cert.c_str();
-        Serial.printf("certPtr: %s\n", certPtr);
+        // Serial.printf("certPtr: %s\n", certPtr);
         const char *ca_cert = "-----BEGIN CERTIFICATE-----\n"
                               "MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n"
                               "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
@@ -529,8 +541,19 @@ void loop() {
                 if (!isWifiSmartConfigCreated)
                     xTaskCreatePinnedToCore(smartConfig, "smartConfig", 2048, NULL, 1, NULL, 0);
             } else if (msgBuffer == "reset") {
-                function.reset();
                 delay(1000);
+                function.reset();
+                mqttClient.disconnect();
+            } else if (msgBuffer == "subscript") {
+                mqttClient.subscribe("test");
+            } else if (msgBuffer == "publish") {
+                mqttClient.publish("test", "hello world");
+            } else if (msgBuffer == "connectMqtt") {
+                mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
+                while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
+                    Serial.printf(".");
+                    vTaskDelay(500);
+                }
             }
             msgBuffer = "";
             break;
