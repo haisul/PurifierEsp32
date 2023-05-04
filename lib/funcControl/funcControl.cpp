@@ -469,6 +469,7 @@ String funcControl::getWifiInfo() {
 
 void funcControl::reset() {
     deleteFile(LittleFS, "/initial/initial.txt");
+    deleteFile(LittleFS, "/initial/topic.txt");
     deleteFile(LittleFS, "/wifi/wifi.txt");
     ESP.restart();
 }

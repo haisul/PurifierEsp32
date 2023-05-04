@@ -4,13 +4,14 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <cstdlib>
 /////////////////////////////////////////////
 const String serialNum = "serialNum:$202304280142";
 /////////////////////////////////////////////
 #include <MQTTClient.h>
 #include <Ticker.h>
 #include <WiFiClientSecure.h>
-MQTTClient mqttClient;
+MQTTClient mqttClient(1024);
 // TimerHandle_t mqttTimer;
 WiFiClientSecure secureClient;
 int wifiReconnectCount = 0;
@@ -47,10 +48,13 @@ const char *pass = "";
 #define MQTT_PASSWORD "33456789"
 
 String compaireTopic = "";
+String topicApp;
+String topicEsp, topicPms, topicTimer;
 
 void smartConfig(void *pvParam);
 void MqttSendMessage(String, String);
 void connectToWifi();
+void loadTopic();
 
 void task(void *pvParameters) {
     isTaskCreated = true;
@@ -58,11 +62,10 @@ void task(void *pvParameters) {
     String func = ((String *)pvParameters)[1];
     String set = ((String *)pvParameters)[2];
     String state = ((String *)pvParameters)[3];
-    String topic = ((String *)pvParameters)[4];
 
     function.commend(func, set, state);
     if (From != "HMIDev") {
-        if (From == "HMI" || topic == "LJ/test")
+        if (From == "HMI")
             function.refresh("MQTT");
         if (From == "MQTT")
             function.refresh("HMI");
@@ -72,7 +75,7 @@ void task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void msgProcess(String From, String msg, String topic = "") {
+void msgProcess(String From, String msg) {
     Serial.printf("\n");
     int index1 = msg.indexOf('_');
     int index2 = msg.indexOf(':');
@@ -87,7 +90,7 @@ void msgProcess(String From, String msg, String topic = "") {
 
     Serial.printf("From:%s | func:%s | set:%s | state:%s\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
     if (!isTaskCreated) {
-        String *params = new String[5]{From, func, set, state, topic};
+        String *params = new String[5]{From, func, set, state};
         xTaskCreatePinnedToCore(task, "task", 4096, (void *)params, 2, NULL, 0); // 1176 bytes
     }
 }
@@ -114,18 +117,18 @@ void MCUcommender(String target) {
         HMI.sendMessage("AdminJson.Json.txt=" + temp);
     }
     if (target == "MQTT" || target == "")
-        // MqttSendMessage(toAppFunctionFunc, function.getInitialJson());
+        MqttSendMessage(topicEsp, function.getInitialJson());
 
-        if (target == "wifion" || target == "wifiInfo") {
-            isWifiDisconnectCreated = false;
-            connectToWifi();
-        } else if (target == "wifioff") {
-            isWifiDisconnectCreated = true;
-            WiFi.disconnect(true);
-        } else if (target == "wifiConfig") {
-            if (!isWifiSmartConfigCreated)
-                xTaskCreatePinnedToCore(smartConfig, "smartConfig", 1024, NULL, 1, NULL, 0);
-        }
+    if (target == "wifion" || target == "wifiInfo") {
+        isWifiDisconnectCreated = false;
+        connectToWifi();
+    } else if (target == "wifioff") {
+        isWifiDisconnectCreated = true;
+        WiFi.disconnect(true);
+    } else if (target == "wifiConfig") {
+        if (!isWifiSmartConfigCreated)
+            xTaskCreatePinnedToCore(smartConfig, "smartConfig", 1024, NULL, 1, NULL, 0);
+    }
 }
 
 void clock(void *pvParam) {
@@ -169,43 +172,49 @@ void clock(void *pvParam) {
             j_timer["uvcCountTime"] = uvcTimerBuff;
 
             serializeJson(j_timer, timerStr);
-            // MqttSendMessage(toAppFunctionCount, timerStr);
+            MqttSendMessage(topicTimer, timerStr);
+            timerStr="";
         }
 
-        vTaskDelay(1000);
+        vTaskDelay(30 * 1000);
     }
 }
 
 void dust(void *pvParam) {
-    String dustVal = "0", tempVal = "0", rhumVal = "0";
+    String dustValStr = "0", tempValStr = "0", rhumValStr = "0";
+    double dustValAvg = 0;
+    int dustValTemp = 0;
     StaticJsonDocument<384> j_pms;
     String pmsStr;
     while (1) {
         pms.read();
-        dustVal = pms.pm25;
-        if (pms.pm25 >= 999)
-            dustVal = "999";
+        dustValStr = pms.pm25;
+        dustValAvg = (pms.pm25 + dustValTemp) / 2;
+
+        if (dustValAvg >= 999)
+            dustValStr = "999";
         else {
-            dustVal = pms.pm25;
+            dustValStr = (int)dustValAvg;
             if (function._modeAuto)
-                function.getDustVal(pms.pm25);
+                function.getDustVal((int)dustValAvg);
         }
-        tempVal = String(pms.n5p0 / 10);
-        rhumVal = String(pms.n10p0 / 10) + "." + String((pms.n10p0 - (pms.n10p0 / 10) * 10));
+        tempValStr = String(pms.n5p0 / 10);
+        rhumValStr = String(pms.n10p0 / 10) + "." + String((pms.n10p0 - (pms.n10p0 / 10) * 10));
 
-        if (pms.pm25 > 0) {
-            HMI.sendMessage("home.pm25.txt=\"" + dustVal + "\"");
-            HMI.sendMessage("home.temp.txt=\"" + tempVal + "\"");
-            HMI.sendMessage("home.rhum.txt=\"" + rhumVal + "\"");
+        if (abs(dustValAvg - dustValTemp) / dustValTemp >= 0.1) {
+            HMI.sendMessage("home.pm25.txt=\"" + dustValStr + "\"");
+            HMI.sendMessage("home.temp.txt=\"" + tempValStr + "\"");
+            HMI.sendMessage("home.rhum.txt=\"" + rhumValStr + "\"");
 
-            j_pms["pm25"] = rhumVal;
-            j_pms["temp"] = tempVal;
-            j_pms["rhum"] = rhumVal;
+            j_pms["pm25"] = rhumValStr;
+            j_pms["temp"] = tempValStr;
+            j_pms["rhum"] = rhumValStr;
 
             serializeJson(j_pms, pmsStr);
-            // MqttSendMessage(toAppFunctionCount, pmsStr);
+            MqttSendMessage(topicPms, pmsStr);
         }
-        vTaskDelay(3000);
+        dustValTemp = (int)dustValAvg;
+        vTaskDelay(1000);
     }
 }
 
@@ -225,7 +234,6 @@ void local(void *pvParam) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 void onMqttConnect(void *pvParam);
 void connectToMqtt(String SSID) {
-
     mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
     Serial.printf("Connecting to MQTT...");
     while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
@@ -234,20 +242,42 @@ void connectToMqtt(String SSID) {
     }
     Serial.println("");
     Serial.println("MQTT is Connected!");
+
+    loadTopic();
+
     String *params = new String[2]{SSID, serialNum};
     xTaskCreatePinnedToCore(onMqttConnect, "onMqttConnect", 8192, params, 1, NULL, 0);
-    // vTaskDelete(NULL);
+}
+
+void loadTopic(void) {
+    String readTopicStr = readFile(LittleFS, "/initial/topic.txt");
+
+    StaticJsonDocument<512> doc;
+    DeserializationError error = deserializeJson(doc, readTopicStr);
+
+    if (error) {
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+        return;
+    }
+
+    String loadTopicApp = doc["topicApp"];
+    String loadTopicEsp = doc["topicEsp"];
+    String loadTopicPms = doc["topicPms"];
+    String loadTopicTimer = doc["topicTimer"];
+
+    topicApp = loadTopicApp;
+    topicEsp = loadTopicEsp;
+    topicPms = loadTopicPms;
+    topicTimer = loadTopicTimer;
+
+    mqttClient.subscribe(topicApp);
 }
 
 void onMqttConnect(void *pvParam) {
     String *params = (String *)pvParam;
     String compaireTopic = params[0];
     String serialNum = params[1];
-    Serial.printf("compaire Topic: ");
-    Serial.println(compaireTopic);
-    Serial.printf("serialNum: ");
-    Serial.println(serialNum);
-
     while (1) {
         mqttClient.loop();
         if (WiFi.status() != WL_CONNECTED) {
@@ -265,40 +295,40 @@ void onMqttConnect(void *pvParam) {
     }
 }
 
-/*void devicePairing(String topic) {
-    while (1) {
+void devicePairing(String topic, String mqttMsg, String serialNum) {
 
-        if (mqttClient.subscribe(topic, 0)) {
-            Serial.println("Subscribed to topic successfully!");
-            mqttClient.publish(topic, serialNum);
-            break;
-        }
-    }
-}*/
+    serialNum.replace("serialNum:", "");
+    mqttMsg.replace("userID:", "");
+    topicApp = mqttMsg + "/" + serialNum + "/app";
+    topicEsp = mqttMsg + "/" + serialNum + "/esp";
+    topicPms = mqttMsg + "/" + serialNum + "/pms";
+    topicTimer = mqttMsg + "/" + serialNum + "/timer";
+    mqttClient.subscribe(topicApp);
+    mqttClient.publish(topic, "connected");
+    mqttClient.unsubscribe(topic);
 
-String topicApp;
-String topicEsp, topicPms, topicTimer;
+    StaticJsonDocument<384> j_topic;
+    j_topic["topicApp"] = mqttMsg + "/" + serialNum + "/app";
+    j_topic["topicEsp"] = mqttMsg + "/" + serialNum + "/esp";
+    j_topic["topicPms"] = mqttMsg + "/" + serialNum + "/pms";
+    j_topic["topicTimer"] = mqttMsg + "/" + serialNum + "/timer";
+
+    String topicStr;
+    serializeJson(j_topic, topicStr);
+    writeFile2(LittleFS, "/initial/topic.txt", topicStr.c_str());
+}
 
 void MqttCallback(String &topic, String &payload) {
     String mqttMsg = "";
     mqttMsg = payload;
-    if (topic == compaireTopic) {
-        if (payload.startsWith("userID:")) {
-            mqttMsg.replace("userID:", "");
-            String serialNumTemp = serialNum;
-            serialNumTemp.replace("serialNum:", "");
-            topicApp = mqttMsg + "/" + serialNumTemp + "/app";
-            topicEsp = mqttMsg + "/" + serialNumTemp + "/esp";
-            topicPms = mqttMsg + "/" + serialNumTemp + "/pms";
-            topicTimer = mqttMsg + "/" + serialNumTemp + "/timer";
-            mqttClient.subscribe(topicApp);
-            mqttClient.publish(topic, "connected");
-            mqttClient.unsubscribe(topic);
-        }
+    if (topic == compaireTopic && payload.startsWith("userID:")) {
+        devicePairing(topic, mqttMsg, serialNum);
+        function.refresh("MQTT");
     }
 
     if (topic == topicApp) {
-        Serial.println(mqttMsg);
+        // Serial.println(mqttMsg);
+        msgProcess("MQTT", mqttMsg);
     }
 
     /*if (mqttMsg == "onFlutter") {
@@ -309,9 +339,12 @@ void MqttCallback(String &topic, String &payload) {
       msgProcess("MQTT", mqttMsg, topic);*/
 }
 
-void MqttSendMessage(String target_topic, String payload) {
+void MqttSendMessage(String targetTopic, String payload) {
+    Serial.println(targetTopic);
     String msg = "#" + payload;
-    mqttClient.publish(target_topic, msg);
+    Serial.println(msg);
+
+    mqttClient.publish(targetTopic, msg);
     /*if (target_topic == toAppSystem || target_topic == toAppFunctionFunc)
         mqttClient.publish(target_topic, 2, false, msg.c_str());
     else
@@ -382,11 +415,9 @@ void WiFiEvent(WiFiEvent_t event) {
         HMI.sendMessage("setwifi.wifiInfo.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
         HMI.sendMessage("AdminSerial.serialTemp.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
         Serial.printf("%s\n", function.getWifiInfo().c_str());
-        // mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
         connectToMqtt(WiFi.SSID());
         compaireTopic = WiFi.SSID();
         // OTAServer();
-        // WiFi.stopSmartConfig();
         wifiReconnectCount = 0;
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
@@ -528,6 +559,8 @@ void setup() {
 }
 
 String msgBuffer;
+char *testMsg = "#{\"pur.state\":true,\"fog.state\":false,\"uvc.state\":false,\"all.state\":false,\"pur.countState\":false,\"fog.countState\":false,\"uvc.countState\":false,\"all.countState\":false,\"pur.time\":1800,\"fog.time\":1800,\"uvc.time\":1800,\"all.time\":1800,\"_modeAuto\":true,\"_modeSleep\":false,\"_modeManual\":false,\"_modeManualDutycycle\":30,\"_modeNon\":false}";
+
 void loop() {
 
     while (Serial.available() > 0) {
@@ -547,13 +580,16 @@ void loop() {
             } else if (msgBuffer == "subscript") {
                 mqttClient.subscribe("test");
             } else if (msgBuffer == "publish") {
-                mqttClient.publish("test", "hello world");
+                mqttClient.publish(topicEsp, testMsg);
             } else if (msgBuffer == "connectMqtt") {
                 mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
                 while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
                     Serial.printf(".");
                     vTaskDelay(500);
                 }
+            } else if (msgBuffer.startsWith("commend:")) {
+                msgBuffer.replace("commend:", "");
+                msgProcess("HMI", msgBuffer);
             }
             msgBuffer = "";
             break;
