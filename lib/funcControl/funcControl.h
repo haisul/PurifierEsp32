@@ -35,20 +35,20 @@ typedef enum {
 
 class funcControl {
 private:
-        const byte fogpump = 12;
-    const byte fogfan = 14;
-    const byte fogMachine = 32;
+    const uint8_t fogpump = 12;
+    const uint8_t fogfan = 14;
+    const uint8_t fogMachine = 32;
     /// pin25、26、27改為pin26、27輸出訊號至L298N ///
     // byte ecin = 25;
     // byte ecout = 26;
     // byte ecswitch = 27;
-    const byte ecin = 26;
-    const byte ecout = 27;
-    const byte uvLamp = 22;
-    const byte purifier = 33;
-    const byte PWMpin = 4;
-    const byte PWMchannel = 1;
-    const byte resolution = 8;
+    const uint8_t ecin = 26;
+    const uint8_t ecout = 27;
+    const uint8_t uvLamp = 22;
+    const uint8_t purifier = 33;
+    const uint8_t PWMpin = 4;
+    const uint8_t PWMchannel = 1;
+    const uint8_t resolution = 8;
     short _freq = 3000;
     short _dutycycle = 30;
     short _dust = 0;
@@ -63,15 +63,15 @@ private:
         bool state = false;
         bool countState = false;
         bool startingCount = false;
-        int time = 1800;
-        unsigned int countTime = 1800;
-        int endEpoch;
+        uint32_t time = 1800;
+        uint32_t countTime = 1800;
+        uint32_t endEpoch;
 
     } status;
 
 public:
     ESP32Time rtc;
-    int epoch = rtc.getEpoch();
+    uint32_t epoch = rtc.getEpoch();
     String SSID = "";
     String PASSWORD = "";
     bool _modeAuto = true, _modeSleep = false, _modeManual = false;

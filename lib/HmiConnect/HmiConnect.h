@@ -9,7 +9,7 @@ String formatMessage(String, String, String);
 class HmiConnect {
 private:
     HardwareSerial _HMI = 0;
-    int _monitor_speed;
+    uint16_t _monitor_speed;
     String _HMI_msg;
     String msgBuffer = "";
     HMI_CALLBACK_SIGNATURE;

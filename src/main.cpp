@@ -1,29 +1,33 @@
 #include "HmiConnect.h"
 #include "funcControl.h"
 #include "littlefsfun.h"
+#include "loggerESP.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <cstdlib>
+Logger logger;
 /////////////////////////////////////////////
-const String serialNum = "serialNum:$202304280142";
+String chipid = String(ESP.getEfuseMac());
+const String serialNum = "serialNum:$iep" + chipid;
 /////////////////////////////////////////////
 #include <MQTTClient.h>
 #include <Ticker.h>
 #include <WiFiClientSecure.h>
-MQTTClient mqttClient(1024);
+MQTTClient mqttClient(4096);
 // TimerHandle_t mqttTimer;
 WiFiClientSecure secureClient;
-int wifiReconnectCount = 0;
-int mqttReconnectCount = 0;
+uint8_t wifiReconnectCount = 0;
+// uint8_t mqttReconnectCount = 0;
 bool isWifiDisconnectCreated = false;
 bool isWifiSmartConfigCreated = false;
 bool isCompaire = false;
+
 // const char *ca_cert;
 //////////////////////////////////////////////
 // #include <AsyncElegantOTA.h>
 // #include <ESPAsyncWebServer.h>
-// AsyncWebServer server(80);
+//  AsyncWebServer server(80);
 //////////////////////////////////////////////
 #include <PMserial.h>
 HardwareSerial pmsSerial(1);
@@ -31,15 +35,13 @@ SerialPM pms(PMS5003, 5, 18);
 //////////////////////////////////////////////
 #define LEDpin 2
 //////////////////////////////////////////////
-const byte powerSignal = 34;
-const byte powerSupply = 25;
+const uint8_t powerSignal = 34;
+const uint8_t powerSupply = 25;
 //////////////////////////////////////////////
 HmiConnect HMI(Serial2, 9600);
 funcControl function;
 //////////////////////////////////////////////
 bool isTaskCreated = false;
-const char *ssid = "";
-const char *pass = "";
 
 #define MQTT_HOST "ya0e11c3.ala.us-east-1.emqxsl.com"
 #define MQTT_PORT 8883
@@ -77,8 +79,8 @@ void task(void *pvParameters) {
 
 void msgProcess(String From, String msg) {
     Serial.printf("\n");
-    int index1 = msg.indexOf('_');
-    int index2 = msg.indexOf(':');
+    uint8_t index1 = msg.indexOf('_');
+    uint8_t index2 = msg.indexOf(':');
     String func = msg.substring(0, index1), set = "", state = "";
 
     if (index2 >= 0) {
@@ -88,7 +90,7 @@ void msgProcess(String From, String msg) {
         set = msg.substring(index1 + 1);
     }
 
-    Serial.printf("From:%s | func:%s | set:%s | state:%s\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
+    Serial.printf("From:%s\nfunc:%s\nset:%s\nstate:%s\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
     if (!isTaskCreated) {
         String *params = new String[5]{From, func, set, state};
         xTaskCreatePinnedToCore(task, "task", 4096, (void *)params, 2, NULL, 0); // 1176 bytes
@@ -111,7 +113,7 @@ void HmiCallback(String HMI_msg) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 void MCUcommender(String target) {
-    Serial.printf("target: %s\n", target);
+    Serial.printf("target: %s", target);
     if (target == "HMI" || target == "") {
         String temp = "\"" + HMI.escapeJson(function.getInitialJson()) + "\"";
         HMI.sendMessage("AdminJson.Json.txt=" + temp);
@@ -173,7 +175,7 @@ void clock(void *pvParam) {
 
             serializeJson(j_timer, timerStr);
             MqttSendMessage(topicTimer, timerStr);
-            timerStr="";
+            timerStr = "";
         }
 
         vTaskDelay(30 * 1000);
@@ -183,7 +185,7 @@ void clock(void *pvParam) {
 void dust(void *pvParam) {
     String dustValStr = "0", tempValStr = "0", rhumValStr = "0";
     double dustValAvg = 0;
-    int dustValTemp = 0;
+    uint16_t dustValTemp = 0;
     StaticJsonDocument<384> j_pms;
     String pmsStr;
     while (1) {
@@ -194,9 +196,9 @@ void dust(void *pvParam) {
         if (dustValAvg >= 999)
             dustValStr = "999";
         else {
-            dustValStr = (int)dustValAvg;
+            dustValStr = (uint16_t)dustValAvg;
             if (function._modeAuto)
-                function.getDustVal((int)dustValAvg);
+                function.getDustVal((uint16_t)dustValAvg);
         }
         tempValStr = String(pms.n5p0 / 10);
         rhumValStr = String(pms.n10p0 / 10) + "." + String((pms.n10p0 - (pms.n10p0 / 10) * 10));
@@ -212,8 +214,9 @@ void dust(void *pvParam) {
 
             serializeJson(j_pms, pmsStr);
             MqttSendMessage(topicPms, pmsStr);
+            pmsStr = "";
         }
-        dustValTemp = (int)dustValAvg;
+        dustValTemp = (uint16_t)dustValAvg;
         vTaskDelay(1000);
     }
 }
@@ -221,7 +224,7 @@ void dust(void *pvParam) {
 void local(void *pvParam) {
     vTaskDelay(2000);
     function_mode_types func[4] = {ALL, PUR, FOG, UVC};
-    for (int i = 0; i < 4; i++)
+    for (uint8_t i = 0; i < 4; i++)
         function.funcState(func[i], OFF);
     while (1) {
         HMI.loop();
@@ -240,8 +243,7 @@ void connectToMqtt(String SSID) {
         Serial.printf(".");
         vTaskDelay(500);
     }
-    Serial.println("");
-    Serial.println("MQTT is Connected!");
+    Serial.printf("MQTT is connected!");
 
     loadTopic();
 
@@ -256,20 +258,14 @@ void loadTopic(void) {
     DeserializationError error = deserializeJson(doc, readTopicStr);
 
     if (error) {
-        Serial.print("deserializeJson() failed: ");
-        Serial.println(error.c_str());
+        Serial.printf("deserializeJson() failed: %s", error.c_str());
         return;
     }
 
-    String loadTopicApp = doc["topicApp"];
-    String loadTopicEsp = doc["topicEsp"];
-    String loadTopicPms = doc["topicPms"];
-    String loadTopicTimer = doc["topicTimer"];
-
-    topicApp = loadTopicApp;
-    topicEsp = loadTopicEsp;
-    topicPms = loadTopicPms;
-    topicTimer = loadTopicTimer;
+    topicApp = doc["topicApp"].as<String>();
+    topicEsp = doc["topicEsp"].as<String>();
+    topicPms = doc["topicPms"].as<String>();
+    topicTimer = doc["topicTimer"].as<String>();
 
     mqttClient.subscribe(topicApp);
 }
@@ -281,6 +277,7 @@ void onMqttConnect(void *pvParam) {
     while (1) {
         mqttClient.loop();
         if (WiFi.status() != WL_CONNECTED) {
+            Serial.printf("mqttClient.disconnect");
             mqttClient.disconnect();
             vTaskDelete(NULL);
         }
@@ -288,15 +285,16 @@ void onMqttConnect(void *pvParam) {
             mqttClient.subscribe(compaireTopic);
             Serial.printf("Subscribed to %s successfully!\n", compaireTopic.c_str());
             mqttClient.publish(compaireTopic, serialNum);
-            Serial.println("publish to topic successfully!");
+            Serial.printf("publish to topic successfully!");
             isCompaire = false;
+            mqttClient.publish("test", __func__);
         }
         vTaskDelay(10);
     }
 }
 
 void devicePairing(String topic, String mqttMsg, String serialNum) {
-
+    mqttClient.publish("test", __func__);
     serialNum.replace("serialNum:", "");
     mqttMsg.replace("userID:", "");
     topicApp = mqttMsg + "/" + serialNum + "/app";
@@ -316,21 +314,33 @@ void devicePairing(String topic, String mqttMsg, String serialNum) {
     String topicStr;
     serializeJson(j_topic, topicStr);
     writeFile2(LittleFS, "/initial/topic.txt", topicStr.c_str());
+    
 }
 
+bool isPairing = false;
+
 void MqttCallback(String &topic, String &payload) {
-    String mqttMsg = "";
-    mqttMsg = payload;
-    if (topic == compaireTopic && payload.startsWith("userID:")) {
-        devicePairing(topic, mqttMsg, serialNum);
-        function.refresh("MQTT");
-    }
+    if (payload != nullptr && payload != "" ) {
+        String mqttMsg = "";
+        mqttMsg = payload;
+        if (topic == compaireTopic && payload.startsWith("userID:") && !isPairing) {
+            isPairing = true;
+            String userId = mqttMsg;
+            devicePairing(topic, userId, serialNum);
+            function.refresh("MQTT");
+            mqttClient.publish("test", "after refresh");
+        }
 
-    if (topic == topicApp) {
-        // Serial.println(mqttMsg);
-        msgProcess("MQTT", mqttMsg);
+        if (topic == topicApp) {
+            if (mqttMsg == "delete") {
+                mqttClient.disconnect();
+                function.reset();
+            } else
+                msgProcess("MQTT", mqttMsg);
+        }
+        Serial.printf("\ntopic:%s mqttMsg:%s\n",topic.c_str(),mqttMsg.c_str());
+        mqttClient.publish("test", __func__);
     }
-
     /*if (mqttMsg == "onFlutter") {
         // MqttSendMessage(toAppSystem, "esp32 receive");
         function.refresh("MQTT");
@@ -339,12 +349,17 @@ void MqttCallback(String &topic, String &payload) {
       msgProcess("MQTT", mqttMsg, topic);*/
 }
 
-void MqttSendMessage(String targetTopic, String payload) {
-    Serial.println(targetTopic);
-    String msg = "#" + payload;
-    Serial.println(msg);
+void MqttSendMessage(const String targetTopic, const String payload) {
+    if (payload != nullptr || payload != "") {
+        Serial.printf(targetTopic.c_str());
+        Serial.printf(payload.c_str());
+        String msg = "#" + payload;
+        // Serial.println(msg);
 
-    mqttClient.publish(targetTopic, msg);
+        mqttClient.publish(targetTopic, msg);
+    }
+    mqttClient.publish("test", __func__);
+
     /*if (target_topic == toAppSystem || target_topic == toAppFunctionFunc)
         mqttClient.publish(target_topic, 2, false, msg.c_str());
     else
@@ -357,9 +372,9 @@ void MqttSendMessage(String targetTopic, String payload) {
 
 void connectToWifi() {
     if (function.SSID != "" && function.PASSWORD != "") {
-        Serial.printf("SSID: %s  PASSWORD: %s\n", function.SSID, function.PASSWORD);
+        Serial.printf("SSID: %s\nPASSWORD: %s", function.SSID, function.PASSWORD);
         WiFi.begin(function.SSID.c_str(), function.PASSWORD.c_str());
-        Serial.printf("connect wifi:%d\n", wifiReconnectCount);
+        Serial.printf("connect wifi:%d", wifiReconnectCount);
     } else if (!isWifiSmartConfigCreated)
         xTaskCreatePinnedToCore(smartConfig, "smartConfig", 2048, NULL, 1, NULL, 0);
 }
@@ -406,15 +421,15 @@ void smartConfig(void *pvParam) {
 }*/
 
 void WiFiEvent(WiFiEvent_t event) {
-    Serial.printf("\n[WiFi-event] event: %d\n", event);
+    Serial.printf("[WiFi-event] event: %d\n", event);
     switch (event) {
     case SYSTEM_EVENT_STA_GOT_IP:
-        Serial.println("WiFi connected");
+        Serial.printf("WiFi connected");
         function.wifiSaveToJson(WiFi.SSID(), WiFi.psk(), WiFi.localIP().toString(), String(WiFi.RSSI()));
         ////////////////////////////////////////////////////////////////////////////////////////////
         HMI.sendMessage("setwifi.wifiInfo.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
         HMI.sendMessage("AdminSerial.serialTemp.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
-        Serial.printf("%s\n", function.getWifiInfo().c_str());
+        Serial.printf("%s", function.getWifiInfo().c_str());
         connectToMqtt(WiFi.SSID());
         compaireTopic = WiFi.SSID();
         // OTAServer();
@@ -430,10 +445,10 @@ void WiFiEvent(WiFiEvent_t event) {
 }
 
 void buttonInterrupt(void *Param) {
-    int buttonState = analogRead(powerSignal);
+    uint16_t buttonState = analogRead(powerSignal);
     bool POWER_ON = false;
-    static int jumpTime = millis();
-    static int currentTime = millis();
+    static uint32_t jumpTime = millis();
+    static uint32_t currentTime = millis();
 
     while (1) {
         buttonState = analogRead(powerSignal);
@@ -443,7 +458,6 @@ void buttonInterrupt(void *Param) {
                 if (POWER_ON) {
                     HMI.sendMessage("sleep=0");
                     HMI.sendMessage("thup=1");
-                    Serial.println("ON");
                     digitalWrite(powerSupply, HIGH);
                 } else {
                     HMI.sendMessage("thup=0");
@@ -457,7 +471,6 @@ void buttonInterrupt(void *Param) {
                     if (function.uvc.state)
                         function.commend("uvc", "state", "off");
                     digitalWrite(powerSupply, LOW);
-                    Serial.println("OFF");
                 }
                 jumpTime = millis();
             }
@@ -470,7 +483,6 @@ void buttonInterrupt(void *Param) {
             POWER_ON = false;
             HMI.sendMessage("sleep=1");
             digitalWrite(powerSupply, LOW);
-            Serial.println("OFF");
         }
 
         vTaskDelay(10);
@@ -479,12 +491,12 @@ void buttonInterrupt(void *Param) {
 
 const char *loadCertFile() {
     if (!initLittleFS()) {
-        Serial.printf("initial LittleFS Failed!\n");
+        Serial.printf("initial LittleFS Failed!");
         return "";
     } else {
         File caFile = LittleFS.open("/emqxsl-ca.crt", "r");
         if (!caFile) {
-            Serial.println("Failed to open file");
+            Serial.printf("Failed to open file");
             return "";
         }
         String cert = caFile.readString();
@@ -519,16 +531,16 @@ const char *loadCertFile() {
             if (certPtr[i] == '\n')
                 j++;
         }
-        Serial.printf("j=%d\n", j);
+        /*Serial.printf("j=%d\n", j);
         Serial.printf("certPtr:%d ca_cert:%d\n", strlen(certPtr), strlen(ca_cert));
-        Serial.printf("isSame: %s\n", ca_cert == certPtr ? "true" : "false");
+        Serial.printf("isSame: %s\n", ca_cert == certPtr ? "true" : "false");*/
         return ca_cert;
     }
 }
 
 void setup() {
-
     Serial.begin(115200);
+
     pinMode(LEDpin, OUTPUT);
     pmsSerial.begin(9600, SERIAL_8E1, 5, 18);
     pms.init();
@@ -558,8 +570,8 @@ void setup() {
     xTaskCreatePinnedToCore(buttonInterrupt, "buttonTask", 4096, NULL, 1, NULL, 1);
 }
 
-String msgBuffer;
-char *testMsg = "#{\"pur.state\":true,\"fog.state\":false,\"uvc.state\":false,\"all.state\":false,\"pur.countState\":false,\"fog.countState\":false,\"uvc.countState\":false,\"all.countState\":false,\"pur.time\":1800,\"fog.time\":1800,\"uvc.time\":1800,\"all.time\":1800,\"_modeAuto\":true,\"_modeSleep\":false,\"_modeManual\":false,\"_modeManualDutycycle\":30,\"_modeNon\":false}";
+String msgBuffer = "";
+String testMsg = "#{\" pur.state \":false,\" fog.state \":false,\" uvc.state \":false,\" all.state \":false,\" pur.countState \":true,\" fog.countState \":false,\" uvc.countState \":false,\" all.countState \":false,\" pur.time \":300,\" fog.time \":1800,\" uvc.time \":1800,\" all.time \":1800,\"_modeAuto\":false,\"_modeSleep\":false,\"_modeManua\":true,\" manualDutycycle \":35,\" non \":\" non \"}";
 
 void loop() {
 
@@ -568,18 +580,19 @@ void loop() {
         char c = Serial.read();
         if (c == '\n') {
             msgBuffer.trim();
-            Serial.printf("Commend: %s\n", msgBuffer.c_str());
+            // Serial.printf("Commend: %s\n", msgBuffer);
             if (msgBuffer == "smartConfig") {
                 delay(1000);
                 if (!isWifiSmartConfigCreated)
                     xTaskCreatePinnedToCore(smartConfig, "smartConfig", 2048, NULL, 1, NULL, 0);
             } else if (msgBuffer == "reset") {
                 delay(1000);
-                function.reset();
                 mqttClient.disconnect();
+                function.reset();
             } else if (msgBuffer == "subscript") {
                 mqttClient.subscribe("test");
             } else if (msgBuffer == "publish") {
+                Serial.println(topicEsp);
                 mqttClient.publish(topicEsp, testMsg);
             } else if (msgBuffer == "connectMqtt") {
                 mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
