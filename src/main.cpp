@@ -6,6 +6,8 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <cstdlib>
+#include <QueueList.h>
+QueueList messageQueue;
 LoggerESP logger;
 /////////////////////////////////////////////
 String chipid = String(ESP.getEfuseMac());
@@ -545,8 +547,8 @@ void setup() {
     WiFi.onEvent(WiFiEvent);
 
     loadCertFile();
-    secureClient.setTimeout(1000);
-    mqttClient.setOptions(30, true, 1000);
+    secureClient.setHandshakeTimeout(2000);
+    mqttClient.setOptions(30, true, 2000);
     mqttClient.onMessage(MqttCallback);
     ///////////////////////////////////////
     function.initialWifi();
@@ -564,6 +566,7 @@ void setup() {
 
 String msgBuffer = "";
 String testMsg = "#{\" pur.state \":false,\" fog.state \":false,\" uvc.state \":false,\" all.state \":false,\" pur.countState \":true,\" fog.countState \":false,\" uvc.countState \":false,\" all.countState \":false,\" pur.time \":300,\" fog.time \":1800,\" uvc.time \":1800,\" all.time \":1800,\"_modeAuto\":false,\"_modeSleep\":false,\"_modeManua\":true,\" manualDutycycle \":35,\" non \":\" non \"}";
+static uint32_t lastMsg = millis();
 
 void loop() {
 
@@ -596,20 +599,32 @@ void loop() {
                 msgBuffer.replace("commend:", "");
                 msgProcess("HMI", msgBuffer);
             } else if (msgBuffer == "QOS0") {
-                bool result = mqttClient.publish("test", "testMsg", false, 0);
-                logger.w("QoS0:%s", result ? "true" : "false");
+                messageQueue.addToQueue("testMsg:QoS0");
+                /*bool result = mqttClient.publish("test", "testMsg", false, 0);                
+                logger.w("QoS0:%s", result ? "true" : "false");*/
             } else if (msgBuffer == "QOS1") {
-                bool result = mqttClient.publish("test", "testMsg", false, 1);
+                messageQueue.addToQueue("testMsg:QoS1");
+                /*bool result = mqttClient.publish("test", "testMsg", false, 1);
                 mqttClient.prepareDuplicate(mqttClient.lastPacketID());
-                logger.w("QoS1:%s", result ? "true" : "false");
+                logger.w("QoS1:%s", result ? "true" : "false");*/
             } else if (msgBuffer == "QOS2") {
-                bool result = mqttClient.publish("test", "testMsg", false, 2);
+                messageQueue.addToQueue("testMsg:QoS2");
+                /*bool result = mqttClient.publish("test", "testMsg", false, 2);
                 mqttClient.prepareDuplicate(mqttClient.lastPacketID());
-                logger.w("QoS2:%s", result ? "true" : "false");
+                logger.w("QoS2:%s", result ? "true" : "false");*/
             }
             msgBuffer = "";
             break;
         } else
             msgBuffer += c;
     }
+
+      if (millis() - lastMsg > 1000) {
+        if(!messageQueue.isQueueEmpty()){
+            String message = messageQueue.getFromQueue();
+            bool result = mqttClient.publish("test", message, false, 2);
+            logger.w("QoS2:%s", result ? "true" : "false");
+        }
+        lastMsg = millis();
+      }
 }
