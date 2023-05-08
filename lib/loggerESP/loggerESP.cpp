@@ -1,16 +1,16 @@
 #include "loggerESP.h"
 
-Logger::Logger() {
+LoggerESP::LoggerESP() {
     Serial.begin(115200);
 }
 
-void Logger::info(const char *file, int line, const char *func, const char *format, ...) {
+void LoggerESP::info(const char *file, int line, const char *func, const char *format, ...) {
     char *buf;
     va_list args;
     va_start(args, format);
-    int bufSize = vsnprintf(NULL, 0, format, args) + 5; // 取得 buf 的大小
+    int bufSize = vsnprintf(NULL, 0, format, args) + 1;
     va_end(args);
-    buf = new char[bufSize]; // 動態配置 buf 的大小
+    buf = new char[bufSize];
     va_start(args, format);
     vsnprintf(buf, bufSize, format, args);
     va_end(args);
@@ -19,13 +19,13 @@ void Logger::info(const char *file, int line, const char *func, const char *form
     printLog(BLUE, "INFO", file, line, func, buf);
 }
 
-void Logger::warring(const char *file, int line, const char *func, const char *format, ...) {
+void LoggerESP::warring(const char *file, int line, const char *func, const char *format, ...) {
     char *buf;
     va_list args;
     va_start(args, format);
-    int bufSize = vsnprintf(NULL, 0, format, args) + 5; // 取得 buf 的大小
+    int bufSize = vsnprintf(NULL, 0, format, args) + 1;
     va_end(args);
-    buf = new char[bufSize]; // 動態配置 buf 的大小
+    buf = new char[bufSize];
     va_start(args, format);
     vsnprintf(buf, bufSize, format, args);
     va_end(args);
@@ -35,13 +35,13 @@ void Logger::warring(const char *file, int line, const char *func, const char *f
     delete[] buf;
 }
 
-void Logger::error(const char *file, int line, const char *func, const char *format, ...) {
+void LoggerESP::error(const char *file, int line, const char *func, const char *format, ...) {
     char *buf;
     va_list args;
     va_start(args, format);
-    int bufSize = vsnprintf(NULL, 0, format, args) + 5; // 取得 buf 的大小
+    int bufSize = vsnprintf(NULL, 0, format, args) + 1;
     va_end(args);
-    buf = new char[bufSize]; // 動態配置 buf 的大小
+    buf = new char[bufSize];
     va_start(args, format);
     vsnprintf(buf, bufSize, format, args);
     va_end(args);
@@ -51,22 +51,33 @@ void Logger::error(const char *file, int line, const char *func, const char *for
     delete[] buf;
 }
 
-void Logger::formatBuf(char *(&buf)) {
+char *LoggerESP::formatBuf(char *(&buf)) {
     int len = strlen(buf);
+    int addSize = 0;
     for (int i = 0; i < len; i++) {
         if (buf[i] == '\n') {
-            memmove(buf + i + 3, buf + i, len - i);
-            buf[i + 1] = '|';
-            buf[i + 2] = ' ';
-            buf[i + 3] = ' ';
-            len += 2;
-            i += 3;
-            buf[len] = '\0';
+            addSize += 3;
         }
     }
+    addSize += 1;
+    char *tmp = new char[len + addSize];
+    int tmp_len = len + addSize;
+    strcpy(tmp, buf);
+    for (int i = 0; i < tmp_len; i++) {
+        if (tmp[i] == '\n') {
+            tmp[i + 1] = '|';
+            tmp[i + 2] = ' ';
+            tmp[i + 3] = ' ';
+            i += 3;
+            tmp[tmp_len] = '\0';
+        }
+    }
+    delete[] buf;
+    buf = tmp;
+    return buf;
 }
 
-void Logger::printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, char *(&buf)) {
+void LoggerESP::printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, char *(&buf)) {
     String loggerMsg = stytle + "=======================================================================\n"
                                 "|  #" +
                        level + "\n"
@@ -82,14 +93,4 @@ void Logger::printLog(const String &stytle, const String &level, const String &f
                              "=======================================================================\033[0m\n";
 
     Serial.println(loggerMsg);
-    /*Serial.print(stytle);
-    Serial.println("=======================================================================");
-    Serial.println("|  #" + level);
-    Serial.printf("|  [%s:%d]\n", file, line);
-    Serial.printf("|  [Function:%s]\n", func);
-    Serial.println("|----------------------------------------------------------------------");
-    Serial.println("|");
-    Serial.printf("|  %s\n", buf);
-    Serial.println("|");
-    Serial.println("=======================================================================\033[0m\n");*/
 }

@@ -11,15 +11,15 @@
 #define YELLOW "\n\033[1m\x1B[33m"
 #define RED "\n\033[1m\x1B[31m"
 
-class Logger {
+class LoggerESP {
 public:
-    Logger();
+    LoggerESP();
     void info(const char *file, int line, const char *func, const char *format, ...);
     void warring(const char *file, int line, const char *func, const char *format, ...);
     void error(const char *file, int line, const char *func, const char *format, ...);
 
 private:
-    void formatBuf(char *(&buf));
+    char *formatBuf(char *(&buf));
     void printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, char *(&buf));
 };
 
