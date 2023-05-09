@@ -6,10 +6,10 @@
 #define w(format, ...) warring(__FILE__, __LINE__, __func__, format, ##__VA_ARGS__)
 #define e(format, ...) error(__FILE__, __LINE__, __func__, format, ##__VA_ARGS__)
 
-#define WHITE "\n\x1B[0m"
-#define BLUE "\n\033[1m\x1B[34m"
-#define YELLOW "\n\033[1m\x1B[33m"
-#define RED "\n\033[1m\x1B[31m"
+#define NORMAL "\n\x1B[0m"
+#define INFO "\n\033[1m\x1B[34m"
+#define WARRING "\n\033[1m\x1B[33m"
+#define ERROR "\n\033[1m\x1B[31m"
 
 class LoggerESP {
 public:

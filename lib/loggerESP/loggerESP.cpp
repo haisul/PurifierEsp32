@@ -16,7 +16,7 @@ void LoggerESP::info(const char *file, int line, const char *func, const char *f
     va_end(args);
 
     formatBuf(buf);
-    printLog(BLUE, "INFO", file, line, func, buf);
+    printLog(INFO, "INFO", file, line, func, buf);
 }
 
 void LoggerESP::warring(const char *file, int line, const char *func, const char *format, ...) {
@@ -31,7 +31,7 @@ void LoggerESP::warring(const char *file, int line, const char *func, const char
     va_end(args);
 
     formatBuf(buf);
-    printLog(YELLOW, "WARRING", file, line, func, buf);
+    printLog(WARRING, "WARRING", file, line, func, buf);
     delete[] buf;
 }
 
@@ -47,7 +47,7 @@ void LoggerESP::error(const char *file, int line, const char *func, const char *
     va_end(args);
 
     formatBuf(buf);
-    printLog(RED, "ERROR", file, line, func, buf);
+    printLog(ERROR, "ERROR", file, line, func, buf);
     delete[] buf;
 }
 

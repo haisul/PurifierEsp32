@@ -2,13 +2,15 @@
 #include "funcControl.h"
 #include "littlefsfun.h"
 #include "loggerESP.h"
+#include "rgbled.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <QueueList.h>
 #include <WiFi.h>
 #include <cstdlib>
-#include <QueueList.h>
 QueueList messageQueue;
 LoggerESP logger;
+rgbLed Led;
 /////////////////////////////////////////////
 String chipid = String(ESP.getEfuseMac());
 const String serialNum = "serialNum:$iep" + chipid;
@@ -252,7 +254,7 @@ void connectToMqtt(String SSID) {
     xTaskCreatePinnedToCore(onMqttConnect, "onMqttConnect", 8192, params, 1, NULL, 0);
 }
 
-void loadTopic(void) {
+void loadTopic() {
     String readTopicStr = readFile(LittleFS, "/initial/topic.txt");
 
     StaticJsonDocument<512> doc;
@@ -321,7 +323,7 @@ void onMqttConnect(void *pvParam) {
             // logger.e(mqttClient.lastError());
             logger.e("lastError:%d", mqttClient.lastError());
             // Serial.println(mqttClient.lastError());
-            //break;
+            // break;
         }
         if (!mqttClient.connected()) {
             while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
@@ -600,7 +602,7 @@ void loop() {
                 msgProcess("HMI", msgBuffer);
             } else if (msgBuffer == "QOS0") {
                 messageQueue.addToQueue("testMsg:QoS0");
-                /*bool result = mqttClient.publish("test", "testMsg", false, 0);                
+                /*bool result = mqttClient.publish("test", "testMsg", false, 0);
                 logger.w("QoS0:%s", result ? "true" : "false");*/
             } else if (msgBuffer == "QOS1") {
                 messageQueue.addToQueue("testMsg:QoS1");
@@ -619,12 +621,16 @@ void loop() {
             msgBuffer += c;
     }
 
-      if (millis() - lastMsg > 1000) {
-        if(!messageQueue.isQueueEmpty()){
+    if (millis() - lastMsg > 1000) {
+        if (!messageQueue.isQueueEmpty()) {
             String message = messageQueue.getFromQueue();
             bool result = mqttClient.publish("test", message, false, 2);
             logger.w("QoS2:%s", result ? "true" : "false");
         }
         lastMsg = millis();
-      }
+    }
+    // Led.solidColour(BLUE);
+    // Led.pulse(BLUE, FAST);
+    // Led.circleTwoColours(WHITE, BLUE, FASTEST, FORWARD);
+    Led.circleRainbow3(FASTEST, FORWARD);
 }
