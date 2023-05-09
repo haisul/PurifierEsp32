@@ -11,10 +11,8 @@ void QueueMQTTClient::setCaFile(WiFiClientSecure *secureClient) {
 
 void QueueMQTTClient::connectToMqtt(String SSID, String serialNum) {
     mqttClient.begin(MQTT_HOST, MQTT_PORT, *secureClient);
-    Serial.printf("Connecting to MQTT...");
     while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
-        Serial.printf(".");
-        vTaskDelay(500);
+        vTaskDelay(250);
     }
     logger.i("MQTT is connected!");
 
