@@ -632,5 +632,5 @@ void loop() {
     // Led.solidColour(BLUE);
     // Led.pulse(BLUE, FAST);
     // Led.circleTwoColours(WHITE, BLUE, FASTEST, FORWARD);
-    Led.circleRainbow3(FASTEST, FORWARD);
+    Led.circleRainbow3(MEDIUM, FORWARD);
 }
