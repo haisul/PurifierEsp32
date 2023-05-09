@@ -41,17 +41,15 @@ private:
     String topicApp;
     String topicEsp, topicPms, topicTimer;
 
+    bool loadCertFile();
     bool loadTopic();
     static void taskFunction(void *pvParam);
     void mqttLoop();
 
 public:
     QueueMQTTClient();
-    void setCaFile(WiFiClientSecure secureClient);
     void connectToMqtt(String SSID, String serialNum);
     bool pairing(String step, String userId);
-    // void onMqttConnect(void *pvParam);
-    // void pairingConnect(void *pvParam);
     void sendMessage(const String targetTopic, const String payload, int qos);
     QueueMQTTClient &mqttCallback(MQTT_CALLBACK_SIGNATURE);
     void paireMassage(String &topic, String &payload);

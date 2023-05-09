@@ -17,10 +17,8 @@ const String serialNum = "serialNum:$iep" + chipid;
 /////////////////////////////////////////////
 #include "QueueMqttClient.h"
 #include <Ticker.h>
-#include <WiFiClientSecure.h>
 QueueMQTTClient mqttClient;
 // TimerHandle_t mqttTimer;
-WiFiClientSecure secureClient;
 uint8_t wifiReconnectCount = 0;
 // uint8_t mqttReconnectCount = 0;
 bool isWifiDisconnectCreated = false;
@@ -247,7 +245,8 @@ void mqttCallback(String &topic, String &payload) {
                 // mqttClient.disconnect();
                 function.reset();
             } else
-                msgProcess("MQTT", mqttMsg);
+                //msgProcess("MQTT", mqttMsg);
+                logger.w("Topic:%s\nMsg:%s",topic,payload);
         }
     }
 }
@@ -317,7 +316,7 @@ void WiFiEvent(WiFiEvent_t event) {
         HMI.sendMessage("AdminSerial.serialTemp.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
         Serial.printf("%s", function.getWifiInfo().c_str());
         mqttClient.connectToMqtt(WiFi.SSID(), serialNum);
-        paireTopic = WiFi.SSID();
+        //paireTopic = WiFi.SSID();
         // OTAServer();
         wifiReconnectCount = 0;
         break;
@@ -375,22 +374,6 @@ void buttonInterrupt(void *Param) {
     }
 }
 
-void loadCertFile() {
-    if (!initLittleFS()) {
-        Serial.printf("initial LittleFS Failed!");
-    } else {
-        File caFile = LittleFS.open("/emqxsl-ca.crt", "r");
-        if (!caFile) {
-            Serial.printf("Failed to open file");
-        }
-        if (secureClient.loadCACert(caFile, caFile.size())) {
-            logger.i("CA cert loaded");
-        } else {
-            logger.e("CA cert load failed");
-        }
-    }
-}
-
 void setup() {
     Serial.begin(115200);
 
@@ -403,10 +386,6 @@ void setup() {
     ///////////////////////////////////////
     WiFi.mode(WIFI_AP_STA);
     WiFi.onEvent(WiFiEvent);
-
-    loadCertFile();
-    mqttClient.setCaFile(secureClient);
-    secureClient.setHandshakeTimeout(2000);
     mqttClient.mqttCallback(mqttCallback);
     ///////////////////////////////////////
     function.initialWifi();
@@ -457,19 +436,11 @@ void loop() {
                 msgBuffer.replace("commend:", "");
                 msgProcess("HMI", msgBuffer);
             } else if (msgBuffer == "QOS0") {
-                // messageQueue.addToQueue("testMsg:QoS0");
-                /*bool result = mqttClient.publish("test", "testMsg", false, 0);
-                logger.w("QoS0:%s", result ? "true" : "false");*/
+                mqttClient.sendMessage("test","testMsg:QoS0",0);
             } else if (msgBuffer == "QOS1") {
-                // messageQueue.addToQueue("testMsg:QoS1");
-                /*bool result = mqttClient.publish("test", "testMsg", false, 1);
-                mqttClient.prepareDuplicate(mqttClient.lastPacketID());
-                logger.w("QoS1:%s", result ? "true" : "false");*/
+                mqttClient.sendMessage("test","testMsg:QoS1",1);
             } else if (msgBuffer == "QOS2") {
-                // messageQueue.addToQueue("testMsg:QoS2");
-                /*bool result = mqttClient.publish("test", "testMsg", false, 2);
-                mqttClient.prepareDuplicate(mqttClient.lastPacketID());
-                logger.w("QoS2:%s", result ? "true" : "false");*/
+                mqttClient.sendMessage("test","testMsg:QoS2",2);
             }
             msgBuffer = "";
             break;

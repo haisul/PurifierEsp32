@@ -5,20 +5,41 @@ QueueMQTTClient::QueueMQTTClient() {
     mqttClient.setOptions(30, true, 2000);
 }
 
-void QueueMQTTClient::setCaFile(WiFiClientSecure secureClient) {
-    this->secureClient = secureClient;
+bool QueueMQTTClient::loadCertFile() {
+    if (!initLittleFS()) {
+        logger.e("initial LittleFS Failed!");
+    } else {
+        File caFile = LittleFS.open("/emqxsl-ca.crt", "r");
+        if (!caFile) {
+            logger.e("Failed to open file");
+        }
+        if (secureClient.loadCACert(caFile, caFile.size())) {
+            logger.i("CA cert loaded");
+            secureClient.setHandshakeTimeout(2000);
+            return true;
+        } else {
+            logger.e("CA cert load failed");
+        }
+    }
+    return false;
 }
 
 void QueueMQTTClient::connectToMqtt(String SSID, String serialNum) {
-    mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
-    while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
-        vTaskDelay(250);
+    if (loadCertFile()) {
+        mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
+        while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
+            vTaskDelay(250);
+        }
+        logger.i("MQTT is connected!");
     }
-    logger.i("MQTT is connected!");
 
     // xTaskCreatePinnedToCore((TaskFunction_t)&QueueMQTTClient::taskFunction, "mqttLoop", 8192, this, 1, NULL, 0);
     // xTaskCreatePinnedToCore((TaskFunction_t)(&QueueMQTTClient::mqttLoop), "mqttLoop", 8192, static_cast<void*>(this), 1, NULL, 0);
-    xTaskCreatePinnedToCore(taskFunction, "mqttLoopk", 8192, NULL, 1, NULL, 0);
+
+    //xTaskCreatePinnedToCore(taskFunction, "mqttLoopk", 8192, NULL, 1, NULL, 0);
+    QueueMQTTClient *params=this;
+    xTaskCreatePinnedToCore(taskFunction, "mqttLoop", 8192, (void *)params, 1, NULL, 0);
+
     if (!loadTopic()) {
         mqttClient.onMessage([this](String &topic, String &payload) {
             this->paireMassage(topic, payload);
@@ -38,7 +59,7 @@ bool QueueMQTTClient::loadTopic() {
     DeserializationError error = deserializeJson(doc, readTopicStr);
 
     if (error) {
-        Serial.printf("deserializeJson() failed: %s", error.c_str());
+        logger.e("deserializeJson() failed: %s", error.c_str());
         return false;
     }
 
@@ -48,6 +69,7 @@ bool QueueMQTTClient::loadTopic() {
     topicTimer = doc["topicTimer"].as<String>();
 
     mqttClient.subscribe(topicApp);
+    logger.i("loadTopic success");
     return true;
 }
 
@@ -109,6 +131,7 @@ void QueueMQTTClient::taskFunction(void *pvParam) {
 }
 
 void QueueMQTTClient::mqttLoop() {
+    
     while (1) {
         if (!mqttClient.loop()) {
             logger.e("lastError:%d", mqttClient.lastError());
