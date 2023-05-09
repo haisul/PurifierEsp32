@@ -5,25 +5,27 @@ QueueMQTTClient::QueueMQTTClient() {
     mqttClient.setOptions(30, true, 2000);
 }
 
-void QueueMQTTClient::setCaFile(WiFiClientSecure *secureClient) {
+void QueueMQTTClient::setCaFile(WiFiClientSecure secureClient) {
     this->secureClient = secureClient;
 }
 
 void QueueMQTTClient::connectToMqtt(String SSID, String serialNum) {
-    mqttClient.begin(MQTT_HOST, MQTT_PORT, *secureClient);
+    mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
     while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
         vTaskDelay(250);
     }
     logger.i("MQTT is connected!");
 
-    xTaskCreatePinnedToCore((TaskFunction_t)&QueueMQTTClient::mqttLoop, "mqttLoop", 8192, this, 1, NULL, 0);
+    // xTaskCreatePinnedToCore((TaskFunction_t)&QueueMQTTClient::taskFunction, "mqttLoop", 8192, this, 1, NULL, 0);
+    // xTaskCreatePinnedToCore((TaskFunction_t)(&QueueMQTTClient::mqttLoop), "mqttLoop", 8192, static_cast<void*>(this), 1, NULL, 0);
+    xTaskCreatePinnedToCore(taskFunction, "mqttLoopk", 8192, NULL, 1, NULL, 0);
     if (!loadTopic()) {
         mqttClient.onMessage([this](String &topic, String &payload) {
             this->paireMassage(topic, payload);
         });
         this->paireTopic = paireTopic;
         this->serialNum = serialNum;
-        pairing("step1");
+        pairing("step1", "");
     } else {
         mqttClient.onMessage(MQTT_callback);
     }
@@ -49,7 +51,7 @@ bool QueueMQTTClient::loadTopic() {
     return true;
 }
 
-bool QueueMQTTClient::pairing(String step, String userId = "") {
+bool QueueMQTTClient::pairing(String step, String userId) {
     if (step == "step1") {
         logger.i("subscribe %s : %s", paireTopic.c_str(), mqttClient.subscribe(paireTopic, 2) ? "true" : "false");
         while (!mqttClient.publish(paireTopic, serialNum, false, 2)) {
@@ -84,24 +86,29 @@ bool QueueMQTTClient::pairing(String step, String userId = "") {
         return false;
 }
 
-void QueueMQTTClient::sendMessage(const String targetTopic, const String payload, Qos qos) {
+void QueueMQTTClient::sendMessage(const String targetTopic, const String payload, int qos) {
     if (payload != nullptr || payload != "") {
         String msg = "#" + payload;
         switch (qos) {
-        case QoS0:
+        case 0:
             QoS0_Queue.addToQueue(msg);
             break;
-        case QoS1:
+        case 1:
             QoS1_Queue.addToQueue(msg);
             break;
-        case QoS2:
+        case 2:
             QoS2_Queue.addToQueue(msg);
             break;
         }
     }
 }
 
-void QueueMQTTClient::mqttLoop(void *pvParam) {
+void QueueMQTTClient::taskFunction(void *pvParam) {
+    QueueMQTTClient *instance = static_cast<QueueMQTTClient *>(pvParam);
+    instance->mqttLoop();
+}
+
+void QueueMQTTClient::mqttLoop() {
     while (1) {
         if (!mqttClient.loop()) {
             logger.e("lastError:%d", mqttClient.lastError());
