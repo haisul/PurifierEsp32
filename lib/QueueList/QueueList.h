@@ -7,11 +7,17 @@ private:
     std::queue<String> myQueue;
 
 public:
-    void addToQueue(String str) {
+    void addQueue(String str) {
         myQueue.push(str);
     }
 
-    String getFromQueue() {
+    void addQueue(String strArray[], int size) {
+        for (int i = 0; i < size; i++) {
+            myQueue.push(strArray[i]);
+        }
+    }
+
+    String getQueue() {
         String str = myQueue.front();
         myQueue.pop();
         return str;

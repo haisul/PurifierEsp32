@@ -26,14 +26,15 @@ private:
     const char *MQTT_USERNAME = "LJ_IEP";
     const char *MQTT_PASSWORD = "33456789";
 
-    MQTTClient mqttClient;
+    MQTTClient mqttClient = MQTTClient(1024);
     WiFiClientSecure secureClient;
+    WiFiClient client;
     QueueList QoS0_Queue, QoS1_Queue, QoS2_Queue;
 
     MQTT_CALLBACK_SIGNATURE;
 
     bool deleteTopic = false;
-    // bool isPaire = false;
+    bool isPairing = false;
     uint32_t lastMsg = millis();
 
     String serialNum;
@@ -53,6 +54,11 @@ public:
     void sendMessage(const String targetTopic, const String payload, int qos);
     QueueMQTTClient &mqttCallback(MQTT_CALLBACK_SIGNATURE);
     void paireMassage(String &topic, String &payload);
+
+    String getTopicEsp();
+    String getTopicApp();
+    String getTopicPms();
+    String getTopicTimer();
 };
 
 #endif
