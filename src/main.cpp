@@ -18,14 +18,9 @@ const String serialNum = "serialNum:$iep" + chipid;
 #include "QueueMqttClient.h"
 #include <Ticker.h>
 QueueMQTTClient mqttClient;
-// TimerHandle_t mqttTimer;
 uint8_t wifiReconnectCount = 0;
-// uint8_t mqttReconnectCount = 0;
 bool isWifiDisconnectCreated = false;
 bool isWifiSmartConfigCreated = false;
-// bool isPaire = false;
-
-// const char *ca_cert;
 //////////////////////////////////////////////
 // #include <AsyncElegantOTA.h>
 // #include <ESPAsyncWebServer.h>
@@ -119,7 +114,7 @@ void MCUcommender(String target) {
         WiFi.disconnect(true);
     } else if (target == "wifiConfig") {
         if (!isWifiSmartConfigCreated)
-            xTaskCreatePinnedToCore(smartConfig, "smartConfig", 1024, NULL, 1, NULL, 0);
+            xTaskCreatePinnedToCore(smartConfig, "smartConfig", 3000, NULL, 1, NULL, 0);
     }
 }
 
@@ -165,6 +160,7 @@ void clock(void *pvParam) {
 
             serializeJson(j_timer, timerStr);
             mqttClient.sendMessage(mqttClient.getTopicTimer(), timerStr, 0);
+            logger.i(timerStr.c_str());
             timerStr = "";
         }
 
@@ -271,7 +267,6 @@ void smartConfig(void *pvParam) {
     while (millis() - smartConfigTime < 120 * 1000) {
         if (WiFi.isConnected()) {
             Serial.println("smartConfigDone");
-            // isPaire = true;
             break;
         }
         vTaskDelay(100);
@@ -280,8 +275,6 @@ void smartConfig(void *pvParam) {
     WiFi.stopSmartConfig();
     Serial.println("SmartConfig end!");
     isWifiSmartConfigCreated = false;
-    /*if (!isPaire)
-        function.reset();*/
     vTaskDelete(NULL);
 }
 
@@ -391,33 +384,19 @@ void setup() {
 }
 
 String msgBuffer = "";
-String testMsg = "#{\" pur.state \":false,\" fog.state \":false,\" uvc.state \":false,\" all.state \":false,\" pur.countState \":true,\" fog.countState \":false,\" uvc.countState \":false,\" all.countState \":false,\" pur.time \":300,\" fog.time \":1800,\" uvc.time \":1800,\" all.time \":1800,\"_modeAuto\":false,\"_modeSleep\":false,\"_modeManua\":true,\" manualDutycycle \":35,\" non \":\" non \"}";
-static uint32_t lastMsg = millis();
-
 void loop() {
 
     while (Serial.available() > 0) {
-
         char c = Serial.read();
         if (c == '\n') {
             msgBuffer.trim();
-            // Serial.printf("Commend: %s\n", msgBuffer);
             if (msgBuffer == "smartConfig") {
                 delay(1000);
                 if (!isWifiSmartConfigCreated)
-                    xTaskCreatePinnedToCore(smartConfig, "smartConfig", 2048, NULL, 1, NULL, 0);
+                    xTaskCreatePinnedToCore(smartConfig, "smartConfig", 3000, NULL, 1, NULL, 0);
             } else if (msgBuffer == "reset") {
                 delay(1000);
-                // mqttClient.disconnect();
                 function.reset();
-            } else if (msgBuffer == "subscript") {
-                // mqttClient.subscribe("test");
-            } else if (msgBuffer == "connectMqtt") {
-                // mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
-                /*while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
-                    Serial.printf(".");
-                    vTaskDelay(500);
-                }*/
             } else if (msgBuffer.startsWith("commend:")) {
                 msgBuffer.replace("commend:", "");
                 msgProcess("HMI", msgBuffer);
@@ -427,21 +406,15 @@ void loop() {
                 mqttClient.sendMessage("test", "testMsg:QoS1", 1);
             } else if (msgBuffer == "QOS2") {
                 mqttClient.sendMessage("test", "testMsg:QoS2", 2);
+            } else if (msgBuffer.startsWith("!")) {
+                msgBuffer.remove(0, 1);
+                HmiCallback(msgBuffer);
             }
             msgBuffer = "";
             break;
         } else
             msgBuffer += c;
     }
-
-    /*if (millis() - lastMsg > 1000) {
-        if (!messageQueue.isQueueEmpty()) {
-            String message = messageQueue.getFromQueue();
-            bool result = mqttClient.publish("test", message, false, 2);
-            logger.w("QoS2:%s", result ? "true" : "false");
-        }
-        lastMsg = millis();
-    }*/
     // Led.solidColour(BLUE);
     // Led.pulse(BLUE, FAST);
     // Led.circleTwoColours(WHITE, BLUE, FASTEST, FORWARD);

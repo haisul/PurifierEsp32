@@ -1,8 +1,4 @@
 #include "funcControl.h"
-#include "Arduino.h"
-#include "littlefsfun.h"
-#include <ArduinoJson.h>
-// #include <SPIFFS.h>
 
 funcControl::funcControl() {
     pinMode(fogpump, OUTPUT);    // Relay1-8 fog Pump
@@ -11,8 +7,9 @@ funcControl::funcControl() {
     pinMode(ecin, OUTPUT);       // L298NA-IN1 ec Direction
     pinMode(ecout, OUTPUT);      // L298NA-IN2 ec Direction
     pinMode(uvLamp, OUTPUT);     // Relay1-1 uv Lamp
-    pinMode(purifier, OUTPUT);   // Relay2-1 purifier Fan
-    pinMode(PWMpin, OUTPUT);     // purifier fan PWMpin
+
+    pinMode(purifier, OUTPUT); // Relay2-1 purifier Fan
+    pinMode(PWMpin, OUTPUT);   // purifier fan PWMpin
 
     digitalWrite(fogpump, LOW);
     digitalWrite(fogfan, LOW);
@@ -20,8 +17,8 @@ funcControl::funcControl() {
     digitalWrite(ecin, LOW);
     digitalWrite(ecout, LOW);
     digitalWrite(uvLamp, LOW);
-    digitalWrite(purifier, LOW);
 
+    digitalWrite(purifier, LOW);
     ledcAttachPin(PWMpin, PWMchannel);
     ledcSetup(PWMchannel, _freq, resolution);
 
@@ -31,6 +28,110 @@ funcControl::funcControl() {
     uvc.name = "uvc";
 }
 
+void funcControl::funcState(function_mode_types mode_types, bool state, bool publish) {
+    if (state) {
+        switch (mode_types) {
+        case PUR:
+            if (!pur.state) {
+                vTaskDelay(500);
+                digitalWrite(purifier, HIGH);
+                pur.state = true;
+                mapDutycycle(nowPurMode);
+                logger.i("pur.state:ON");
+            }
+            break;
+
+        case FOG:
+            if (!fog.state) {
+                digitalWrite(fogMachine, HIGH);
+                vTaskDelay(500);
+                digitalWrite(fogpump, HIGH);
+                digitalWrite(fogfan, HIGH);
+                fog.state = true;
+                logger.i("fog.state:ON");
+            }
+            break;
+        case UVC:
+            if (!uvc.state) {
+                digitalWrite(ecin, LOW);
+                digitalWrite(ecout, LOW);
+                digitalWrite(uvLamp, HIGH);
+                digitalWrite(ecout, HIGH);
+                vTaskDelay(6000);
+                digitalWrite(ecout, LOW);
+                uvc.state = true;
+                logger.i("uvc.state:ON");
+            }
+            break;
+        case ALL:
+            if (!all.state) {
+                funcState(PUR, ON);
+                funcState(FOG, ON);
+                funcState(UVC, ON);
+                all.state = true;
+                logger.i("all.state:ON");
+            }
+            break;
+
+        default:
+            logger.e("Message error");
+            break;
+        }
+    } else {
+        switch (mode_types) {
+        case PUR:
+            if (pur.state) {
+                vTaskDelay(500);
+                digitalWrite(purifier, LOW);
+                pur.state = false;
+                logger.i("pur.state:OFF");
+            }
+            break;
+
+        case FOG:
+            if (fog.state) {
+                digitalWrite(fogMachine, LOW);
+                vTaskDelay(2000);
+                digitalWrite(fogpump, LOW);
+                digitalWrite(fogfan, LOW);
+                fog.state = false;
+                logger.i("fog.state:OFF");
+            }
+            break;
+        case UVC:
+            if (uvc.state) {
+                digitalWrite(ecin, LOW);
+                digitalWrite(ecout, LOW);
+                digitalWrite(uvLamp, LOW);
+                digitalWrite(ecin, HIGH);
+                vTaskDelay(6000);
+                digitalWrite(ecin, LOW);
+                uvc.state = false;
+                logger.i("uvc.state:OFF");
+            }
+            break;
+        case ALL:
+            if (all.state) {
+                funcState(PUR, OFF);
+                funcState(FOG, OFF);
+                funcState(UVC, OFF);
+                all.state = false;
+                logger.i("all.state:OFF");
+            }
+            break;
+
+        default:
+            logger.e("Message error\n");
+            break;
+        }
+    }
+    startCountTime(mode_types);
+    if (publish) {
+        saveToJson();
+        refresh();
+    }
+}
+
 void funcControl::purMode(function_mode_types mode) {
 
     switch (mode) {
@@ -38,21 +139,21 @@ void funcControl::purMode(function_mode_types mode) {
         _modeAuto = true;
         _modeSleep = false;
         _modeManual = false;
-        Serial.printf("AutoMode:ON\n");
+        logger.i("AutoMode:ON");
         break;
 
     case SLEEP:
         _modeAuto = false;
         _modeSleep = true;
         _modeManual = false;
-        Serial.printf("SleepMode:ON\n");
+        logger.i("SleepMode:ON");
         break;
 
     case MANUAL:
         _modeAuto = false;
         _modeSleep = false;
         _modeManual = true;
-        Serial.printf("ManualMode:ON\n");
+        logger.i("ManualMode:ON");
         break;
 
     default:
@@ -87,7 +188,7 @@ void funcControl::mapDutycycle(function_mode_types mode) {
     else if (_dutycycle < 40)
         _dutycycle = 40;
     ledcWrite(PWMchannel, _dutycycle);
-    Serial.printf("pur_speed:%d\n", _dutycycle);
+    logger.i("pur_speed:%d", _dutycycle);
 }
 
 void funcControl::getDustVal(int dustVal = 0) {
@@ -108,130 +209,26 @@ void funcControl::getDutycycle(int val) {
     else if (_dutycycle < 30)
         _dutycycle = 30;
     ledcWrite(PWMchannel, _dutycycle);
-    Serial.printf("dutyCycle: %d\n", _dutycycle);
-}
-
-void funcControl::funcState(function_mode_types mode_types, bool state, bool publish) {
-    if (state) {
-        switch (mode_types) {
-        case PUR:
-            if (!pur.state) {
-                vTaskDelay(500);
-                digitalWrite(purifier, HIGH);
-                pur.state = true;
-                mapDutycycle(nowPurMode);
-                Serial.printf("pur.state:ON\n");
-            }
-            break;
-
-        case FOG:
-            if (!fog.state) {
-                digitalWrite(fogMachine, HIGH);
-                vTaskDelay(500);
-                digitalWrite(fogpump, HIGH);
-                digitalWrite(fogfan, HIGH);
-                fog.state = true;
-                Serial.printf("fog.state:ON\n");
-            }
-            break;
-        case UVC:
-            if (!uvc.state) {
-                digitalWrite(ecin, LOW);
-                digitalWrite(ecout, LOW);
-                digitalWrite(uvLamp, HIGH);
-                digitalWrite(ecout, HIGH);
-                vTaskDelay(6000);
-                digitalWrite(ecout, LOW);
-                uvc.state = true;
-                Serial.printf("uvc.state:ON\n");
-            }
-            break;
-        case ALL:
-            if (!all.state) {
-                funcState(PUR, ON);
-                funcState(FOG, ON);
-                funcState(UVC, ON);
-                all.state = true;
-                Serial.printf("all.state:ON\n");
-            }
-            break;
-
-        default:
-            Serial.printf("Message error\n");
-            break;
-        }
-    } else {
-        switch (mode_types) {
-        case PUR:
-            if (pur.state) {
-                vTaskDelay(500);
-                digitalWrite(purifier, LOW);
-                pur.state = false;
-                Serial.printf("pur.state:OFF\n");
-            }
-            break;
-
-        case FOG:
-            if (fog.state) {
-                digitalWrite(fogMachine, LOW);
-                vTaskDelay(2000);
-                digitalWrite(fogpump, LOW);
-                digitalWrite(fogfan, LOW);
-                fog.state = false;
-                Serial.printf("fog.state:OFF\n");
-            }
-            break;
-        case UVC:
-            if (uvc.state) {
-                digitalWrite(ecin, LOW);
-                digitalWrite(ecout, LOW);
-                digitalWrite(uvLamp, LOW);
-                digitalWrite(ecin, HIGH);
-                vTaskDelay(6000);
-                digitalWrite(ecin, LOW);
-                uvc.state = false;
-                Serial.printf("uvc.state:OFF\n");
-            }
-            break;
-        case ALL:
-            if (all.state) {
-                funcState(PUR, OFF);
-                funcState(FOG, OFF);
-                funcState(UVC, OFF);
-                all.state = false;
-                Serial.printf("all.state:OFF\n");
-            }
-            break;
-
-        default:
-            Serial.printf("Message error\n");
-            break;
-        }
-    }
-    startCountTime(mode_types);
-    if (publish) {
-        saveToJson();
-        refresh();
-    }
+    logger.i("dutyCycle: %d", _dutycycle);
 }
 
 void funcControl::countSet(function_mode_types mode_types, bool state) {
     switch (mode_types) {
     case PUR:
         pur.countState = state;
-        Serial.printf("pur.countState : %s\n", pur.countState ? "ON" : "OFF");
+        logger.i("pur.countState : %s", pur.countState ? "ON" : "OFF");
         break;
     case FOG:
         fog.countState = state;
-        Serial.printf("fog.countState : %s\n", fog.countState ? "ON" : "OFF");
+        logger.i("fog.countState : %s", fog.countState ? "ON" : "OFF");
         break;
     case UVC:
         uvc.countState = state;
-        Serial.printf("uvc.countState : %s\n", uvc.countState ? "ON" : "OFF");
+        logger.i("uvc.countState : %s", uvc.countState ? "ON" : "OFF");
         break;
     case ALL:
         all.countState = state;
-        Serial.printf("all.countState : %s\n", all.countState ? "ON" : "OFF");
+        logger.i("all.countState : %s", all.countState ? "ON" : "OFF");
     default:
         break;
     }
@@ -242,19 +239,19 @@ void funcControl::timeSet(function_mode_types mode_types, int time) {
     switch (mode_types) {
     case PUR:
         pur.time = time;
-        Serial.printf("pur.setTime = %d\n", pur.time);
+        logger.i("pur.setTime = %d", pur.time);
         break;
     case FOG:
         fog.time = time;
-        Serial.printf("fog.setTime = %d\n", fog.time);
+        logger.i("fog.setTime = %d", fog.time);
         break;
     case UVC:
         uvc.time = time;
-        Serial.printf("uvc.setTime = %d\n", uvc.time);
+        logger.i("uvc.setTime = %d", uvc.time);
         break;
     case ALL:
         all.time = time;
-        Serial.printf("all.setTime = %d\n", all.time);
+        logger.i("all.setTime = %d", all.time);
     default:
         break;
     }
@@ -288,11 +285,8 @@ void funcControl::commend(String mode_types, String set, String state) {
         set.remove(0, 4);
         devMode(set, status);
     }
-
     if (mode_types == "system")
         systemCommend(set, state);
-
-    Serial.printf("\n");
 }
 
 void funcControl::systemCommend(String set, String state) {
@@ -386,8 +380,7 @@ void funcControl::initialJson() {
     DeserializationError error = deserializeJson(doc, readinitialStr);
 
     if (error) {
-        Serial.print("deserializeJson() failed: ");
-        Serial.println(error.c_str());
+        logger.e("deserializeJson() failed: %s", error.c_str());
         return;
     }
 
@@ -406,65 +399,21 @@ void funcControl::initialJson() {
 
     refresh();
     saveToJson();
-    Serial.printf("initial LittleFS Complete!\n");
+    logger.i("initial LittleFS Complete!");
 }
 
 void funcControl::MachineInitial() {
     if (!initLittleFS()) {
-        Serial.printf("initial LittleFS Failed!\n");
+        logger.e("initial LittleFS Failed!");
         return;
     } else {
         initialJson();
     }
 }
 
-void funcControl::wifiSaveToJson(String SSID, String PASSWORD, String IP, String RSSI) {
-    StaticJsonDocument<384> j_wifi;
-    String wifiStr;
-
-    j_wifi["SSID"] = SSID;
-    j_wifi["PASSWORD"] = PASSWORD;
-    j_wifi["IP"] = IP;
-    j_wifi["RSSI"] = RSSI;
-
-    serializeJson(j_wifi, wifiStr);
-    writeFile2(LittleFS, "/wifi/wifi.txt", wifiStr.c_str());
-    Serial.println("WIFI SSID PASSWORD SAVED!");
-}
-
-void funcControl::initialWifi() {
-
-    if (!initLittleFS()) {
-        Serial.printf("initial LittleFS Failed!\n");
-        return;
-    } else {
-        String readWifiStr = readFile(LittleFS, "/wifi/wifi.txt");
-        StaticJsonDocument<512> wifi;
-        DeserializationError error = deserializeJson(wifi, readWifiStr);
-
-        if (error) {
-            Serial.print("deserialize WIFI Json() failed: ");
-            Serial.println(error.c_str());
-            return;
-        }
-
-        String ssid = wifi["SSID"];
-        String pass = wifi["PASSWORD"];
-
-        SSID = ssid;
-        PASSWORD = pass;
-        Serial.printf("WIFI initial complete\n");
-    }
-}
-
 String funcControl::getInitialJson() {
     String readinitialStr = readFile(LittleFS, "/initial/initial.txt");
     return readinitialStr;
-}
-
-String funcControl::getWifiInfo() {
-    String readWifiInfoStr = readFile(LittleFS, "/wifi/wifi.txt");
-    return readWifiInfoStr;
 }
 
 void funcControl::reset() {
@@ -530,5 +479,50 @@ void funcControl::devMode(String set, bool state) {
             digitalWrite(fogfan, HIGH);
         else
             digitalWrite(fogfan, LOW);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void funcControl::wifiSaveToJson(String SSID, String PASSWORD, String IP, String RSSI) {
+    StaticJsonDocument<384> j_wifi;
+    String wifiStr;
+
+    j_wifi["SSID"] = SSID;
+    j_wifi["PASSWORD"] = PASSWORD;
+    j_wifi["IP"] = IP;
+    j_wifi["RSSI"] = RSSI;
+
+    serializeJson(j_wifi, wifiStr);
+    writeFile2(LittleFS, "/wifi/wifi.txt", wifiStr.c_str());
+    logger.i("WIFI SSID PASSWORD SAVED!");
+}
+
+String funcControl::getWifiInfo() {
+    String readWifiInfoStr = readFile(LittleFS, "/wifi/wifi.txt");
+    return readWifiInfoStr;
+}
+
+void funcControl::initialWifi() {
+
+    if (!initLittleFS()) {
+        logger.e("initial LittleFS Failed!");
+        return;
+    } else {
+        String readWifiStr = readFile(LittleFS, "/wifi/wifi.txt");
+        StaticJsonDocument<512> wifi;
+        DeserializationError error = deserializeJson(wifi, readWifiStr);
+
+        if (error) {
+            logger.e("deserialize WIFI Json() failed: %s", error.c_str());
+            return;
+        }
+
+        String ssid = wifi["SSID"];
+        String pass = wifi["PASSWORD"];
+
+        SSID = ssid;
+        PASSWORD = pass;
+        logger.i("WIFI initial complete\n");
     }
 }

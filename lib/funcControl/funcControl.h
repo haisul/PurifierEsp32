@@ -1,6 +1,9 @@
 #ifndef __FUNCCONTROL_
 #define __FUNCCONTROL_
+#include "littlefsfun.h"
+#include "loggerESP.h"
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <ESP32Time.h>
 
 typedef enum {
@@ -35,6 +38,8 @@ typedef enum {
 
 class funcControl {
 private:
+    LoggerESP logger;
+
     const uint8_t fogpump = 12;
     const uint8_t fogfan = 14;
     const uint8_t fogMachine = 32;
@@ -45,6 +50,7 @@ private:
     const uint8_t ecin = 26;
     const uint8_t ecout = 27;
     const uint8_t uvLamp = 22;
+
     const uint8_t purifier = 33;
     const uint8_t PWMpin = 4;
     const uint8_t PWMchannel = 1;
