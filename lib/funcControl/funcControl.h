@@ -43,10 +43,7 @@ private:
     const uint8_t fogpump = 12;
     const uint8_t fogfan = 14;
     const uint8_t fogMachine = 32;
-    /// pin25、26、27改為pin26、27輸出訊號至L298N ///
-    // byte ecin = 25;
-    // byte ecout = 26;
-    // byte ecswitch = 27;
+
     const uint8_t ecin = 26;
     const uint8_t ecout = 27;
     const uint8_t uvLamp = 22;

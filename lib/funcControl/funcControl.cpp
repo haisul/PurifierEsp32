@@ -4,9 +4,10 @@ funcControl::funcControl() {
     pinMode(fogpump, OUTPUT);    // Relay1-8 fog Pump
     pinMode(fogfan, OUTPUT);     // Relay1-7 fog Fan
     pinMode(fogMachine, OUTPUT); // Relay2-2 fog Machine
-    pinMode(ecin, OUTPUT);       // L298NA-IN1 ec Direction
-    pinMode(ecout, OUTPUT);      // L298NA-IN2 ec Direction
-    pinMode(uvLamp, OUTPUT);     // Relay1-1 uv Lamp
+
+    pinMode(ecin, OUTPUT);   // L298NA-IN1 ec Direction
+    pinMode(ecout, OUTPUT);  // L298NA-IN2 ec Direction
+    pinMode(uvLamp, OUTPUT); // Relay1-1 uv Lamp
 
     pinMode(purifier, OUTPUT); // Relay2-1 purifier Fan
     pinMode(PWMpin, OUTPUT);   // purifier fan PWMpin
