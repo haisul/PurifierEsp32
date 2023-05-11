@@ -50,46 +50,67 @@ void LoggerESP::error(const char *file, int line, const char *func, const char *
 }
 
 char *LoggerESP::formatBuf(char *(&buf)) {
+    const int MAX_LINE_LENGTH = 100;
     int len = strlen(buf);
     int addSize = 0;
     for (int i = 0; i < len; i++) {
         if (buf[i] == '\n') {
             addSize += 3;
         }
+        if (i > 0 && i % MAX_LINE_LENGTH == 0) {
+            addSize++;
+        }
     }
     addSize += 1;
     char *tmp = new char[len + addSize];
     int tmp_len = len + addSize;
+    int lineCount = 0; // 紀錄當前行的字元數
+
     strcpy(tmp, buf);
     for (int i = 0; i < tmp_len; i++) {
+        lineCount++;
+        if (lineCount >= MAX_LINE_LENGTH) {
+            memmove(tmp + i + 2, tmp + i + 1, tmp_len - i - 2);
+            tmp[i + 1] = '\n';
+            //i++;
+            lineCount = 0;
+        }
         if (tmp[i] == '\n') {
             memmove(tmp + i + 4, tmp + i + 1, tmp_len - i - 4);
             tmp[i + 1] = '|';
             tmp[i + 2] = ' ';
             tmp[i + 3] = ' ';
             i += 4;
-            tmp[tmp_len] = '\0';
+
+            lineCount = 0;
         }
     }
+    tmp[tmp_len] = '\0';
     delete[] buf;
     buf = tmp;
     return buf;
 }
 
 void LoggerESP::printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, char *(&buf)) {
-    String loggerMsg = stytle + "=======================================================================\n"
-                                "|  #" +
+    String line1="=", line2;
+    for (int i = 0; i < 109; i++) {
+        line1 += "=";
+        line2 += "-";
+    }
+    String loggerMsg = stytle + line1 + "\n"
+                                        "|  #" +
                        level + "\n"
                                "|  [" +
                        file + ":" + line + "]\n"
                                            "|  [Function:" +
                        func + "]\n"
-                              "|----------------------------------------------------------------------\n"
-                              "|\n"
-                              "|  " +
+                              "|" +
+                       line2 + "\n"
+                               "|\n"
+                               "|  " +
                        buf + "\n"
-                             "|\n"
-                             "=======================================================================\033[0m\n";
+                             "|\n" +
+                       line1 + "\033[0m\n";
 
     Serial.println(loggerMsg);
 }

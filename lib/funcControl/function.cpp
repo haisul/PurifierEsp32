@@ -1,14 +1,20 @@
 #include "function.h"
 ESP32Time rtc;
 
-Function::Function() {}
+Function::Function(String name) {
+    this->name = name;
+}
 
 void Function::power(bool status) {
     state = status;
     if (state && countState) {
         endTime = rtc.getEpoch() + time;
         startingCount = true;
+        logger.i("%s startingCount", name.c_str());
+    } else {
+        startingCount = false;
     }
+    logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
 void Function::count(bool status) {
@@ -16,11 +22,16 @@ void Function::count(bool status) {
     if (state && countState) {
         endTime = rtc.getEpoch() + time;
         startingCount = true;
+        logger.i("%s startingCount", name.c_str());
+    } else {
+        startingCount = false;
     }
+    logger.i("%s COUNT:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
 void Function::setTime(uint32_t time) {
     this->time = time;
+    logger.i("%s TIME:%d", name.c_str(), time);
 }
 
 bool Function::countStart() { return startingCount; }
@@ -41,7 +52,6 @@ void Function::setVariable(JsonVariant j_initial) {
     if (error)
         return;
 
-    // state = doc["state"];
     countState = doc["countState"];
     time = doc["time"];
 }
@@ -53,7 +63,7 @@ uint16_t Function::getEndTime() { return endTime; }
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 
-Purifier::Purifier() : Function() {
+Purifier::Purifier(String name) : Function(name) {
     pinMode(purifier, OUTPUT); // Relay2-1 purifier Fan
     pinMode(PWMpin, OUTPUT);   // purifier fan PWMpin
     digitalWrite(purifier, LOW);
@@ -68,10 +78,11 @@ void Purifier::power(bool status) {
         startingCount = true;
     }
     Purifier *params = this;
-    xTaskCreatePinnedToCore(powerControl, "powerControl", 2048, (void *)params, 1, NULL, 0);
+    xTaskCreatePinnedToCore(purPowerControl, "purPowerControl", 2048, (void *)params, 1, NULL, 0);
+    logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
-void Purifier::powerControl(void *pvParam) {
+void Purifier::purPowerControl(void *pvParam) {
     Purifier *instance = static_cast<Purifier *>(pvParam);
     if (instance->state) {
         vTaskDelay(500);
@@ -80,6 +91,7 @@ void Purifier::powerControl(void *pvParam) {
         vTaskDelay(500);
         digitalWrite(instance->purifier, LOW);
     }
+
     vTaskDelete(NULL);
 }
 
@@ -88,14 +100,17 @@ void Purifier::setMode(MODE mode) {
     switch (mode) {
     case autoMode:
         dutycycle = 255 / 4 + (255 * 3 / 4) * dustVal / 500;
+        logger.i("%s MODE:AUTO", name.c_str());
         break;
 
     case sleepMode:
         dutycycle = 40;
+        logger.i("%s MODE:SLEEP", name.c_str());
         break;
 
     case manualMode:
         dutycycle = manualDutycycle * 2.55;
+        logger.i("%s MODE:MANUAL", name.c_str());
         break;
     }
 
@@ -108,12 +123,14 @@ void Purifier::setMode(MODE mode) {
 
 void Purifier::setDust(uint16_t val) {
     dustVal = val;
-    setMode(AutoMode);
+    if (modeState == autoMode)
+        setMode(AutoMode);
 }
 
 void Purifier::setDuty(uint16_t val) {
     manualDutycycle = val;
     setMode(ManualMode);
+    logger.i("%s DUTY:%s", name.c_str(), val);
 }
 
 JsonVariant Purifier::getVariable() {
@@ -142,7 +159,7 @@ void Purifier::setVariable(JsonVariant j_initial) {
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 
-FogMachine::FogMachine() : Function() {
+FogMachine::FogMachine(String name) : Function(name) {
     pinMode(fogpump, OUTPUT);    // Relay1-8 fog Pump
     pinMode(fogfan, OUTPUT);     // Relay1-7 fog Fan
     pinMode(fogMachine, OUTPUT); // Relay2-2 fog Machine
@@ -155,10 +172,11 @@ void FogMachine::power(bool status) {
         startingCount = true;
     }
     FogMachine *params = this;
-    xTaskCreatePinnedToCore(powerControl, "powerControl", 2048, (void *)params, 1, NULL, 0);
+    xTaskCreatePinnedToCore(fogPowerControl, "fogPowerControl", 2048, (void *)params, 1, NULL, 0);
+    logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
-void FogMachine::powerControl(void *pvParam) {
+void FogMachine::fogPowerControl(void *pvParam) {
     FogMachine *instance = static_cast<FogMachine *>(pvParam);
     if (instance->state) {
         digitalWrite(instance->fogMachine, HIGH);
@@ -187,7 +205,7 @@ void FogMachine::increment(String set, bool status) {
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 
-UvcLamp::UvcLamp() : Function() {
+UvcLamp::UvcLamp(String name) : Function(name) {
     pinMode(ecin, OUTPUT);   // L298NA-IN1 ec Direction
     pinMode(ecout, OUTPUT);  // L298NA-IN2 ec Direction
     pinMode(uvLamp, OUTPUT); // Relay1-1 uv Lamp
@@ -200,10 +218,11 @@ void UvcLamp::power(bool status) {
         startingCount = true;
     }
     UvcLamp *params = this;
-    xTaskCreatePinnedToCore(powerControl, "powerControl", 2048, (void *)params, 1, NULL, 0);
+    xTaskCreatePinnedToCore(uvcPowerControl, "uvcPowerControl", 2048, (void *)params, 1, NULL, 0);
+    logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
-void UvcLamp::powerControl(void *pvParam) {
+void UvcLamp::uvcPowerControl(void *pvParam) {
     UvcLamp *instance = static_cast<UvcLamp *>(pvParam);
     if (instance->state) {
         digitalWrite(instance->ecin, LOW);

@@ -1,5 +1,6 @@
 #ifndef __FUNCTION__
 #define __FUNCTION__
+#include "loggerESP.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <ESP32Time.h>
@@ -27,7 +28,7 @@ protected:
     uint32_t endTime;
 
 public:
-    Function();
+    Function(String);
     virtual void power(bool);
     virtual void setVariable(JsonVariant);
     virtual JsonVariant getVariable();
@@ -55,10 +56,10 @@ private:
     uint8_t manualDutycycle = 30;
 
     MODE modeState = autoMode;
-    static void powerControl(void *pvParam);
+    static void purPowerControl(void *pvParam);
 
 public:
-    Purifier();
+    Purifier(String);
     void power(bool) override;
     void setMode(MODE);
     void setDust(uint16_t);
@@ -76,10 +77,10 @@ private:
     const uint8_t fogfan = 14;
     const uint8_t fogMachine = 32;
 
-    static void powerControl(void *pvParam);
+    static void fogPowerControl(void *pvParam);
 
 public:
-    FogMachine();
+    FogMachine(String);
     void power(bool) override;
     void increment(String, bool);
 };
@@ -93,10 +94,10 @@ private:
     const uint8_t ecout = 27;
     const uint8_t uvLamp = 22;
 
-    static void powerControl(void *pvParam);
+    static void uvcPowerControl(void *pvParam);
 
 public:
-    UvcLamp();
+    UvcLamp(String);
     void power(bool) override;
     void increment(String, bool);
 };

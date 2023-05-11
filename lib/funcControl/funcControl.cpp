@@ -1,7 +1,6 @@
 #include "funcControl.h"
 
-funcControl::funcControl() {
-    funcState("all", false);
+funcControl::funcControl() : all("ALL"), pur("PUR"), fog("FOG"), uvc("UVC") {
 }
 
 void funcControl::commend(String function, String set, String state) {

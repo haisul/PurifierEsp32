@@ -71,8 +71,8 @@ void msgProcess(String From, String msg) {
         set = msg.substring(index1 + 1);
     }
 
-    /*Serial.printf("From:%s\nfunc:%s\nset:%s\nstate:%s\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
-    if (!isTaskCreated) {
+    logger.i("From:%s\nfunc:%s\nset:%s\nstate:%s\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
+    /*if (!isTaskCreated) {
         String *params = new String[5]{From, func, set, state};
         xTaskCreatePinnedToCore(task, "task", 4096, (void *)params, 2, NULL, 0); // 1176 bytes
     }*/
@@ -183,14 +183,15 @@ void dust(void *pvParam) {
 
         if (dustValAvg >= 999)
             dustValStr = "999";
-        else {
+        else
             dustValStr = (uint16_t)dustValAvg;
-            function.pur.setDust((uint16_t)dustValAvg);
-        }
+
         tempValStr = String(pms.n5p0 / 10);
         rhumValStr = String(pms.n10p0 / 10) + "." + String((pms.n10p0 - (pms.n10p0 / 10) * 10));
 
         if (abs(dustValAvg - dustValTemp) / dustValTemp >= 0.1) {
+            function.pur.setDust((uint16_t)dustValAvg);
+
             HMI.sendMessage("home.pm25.txt=\"" + dustValStr + "\"");
             HMI.sendMessage("home.temp.txt=\"" + tempValStr + "\"");
             HMI.sendMessage("home.rhum.txt=\"" + rhumValStr + "\"");
@@ -209,7 +210,8 @@ void dust(void *pvParam) {
 }
 
 void local(void *pvParam) {
-    vTaskDelay(2000);
+    vTaskDelay(1000);
+    function.commend("all", "state", "off");
     while (1) {
         HMI.loop();
         vTaskDelay(50);
@@ -302,6 +304,7 @@ void setup() {
     pmsSerial.begin(9600, SERIAL_8E1, 5, 18);
     pms.init();
     ///////////////////////////////////////
+    
     pinMode(powerSignal, INPUT_PULLDOWN);
     pinMode(powerSupply, OUTPUT);
     ///////////////////////////////////////
@@ -343,6 +346,8 @@ void loop() {
             } else if (msgBuffer.startsWith("!")) {
                 msgBuffer.remove(0, 1);
                 HmiCallback(msgBuffer);
+            } else if ("print") {
+                logger.i("The quick brown fox jumps over the lazy dog.\nThis is a well-known sentence that is often used to demonstrate typing or font styles. However, it is more than just a typing exercise. The sentence contains every letter of the English alphabet, making it a pangram. Pangrams are a fun way to test your typing skills, and they can also be used in design and typography to showcase different typefaces. In addition to pangrams, there are many other interesting linguistic phenomena in the English language, such as palindromes, anagrams, and tongue twisters");
             }
             msgBuffer = "";
             break;

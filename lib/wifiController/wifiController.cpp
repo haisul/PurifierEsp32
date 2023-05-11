@@ -31,7 +31,7 @@ void wifiController::WiFiEvent(WiFiEvent_t event) {
         instance->saveToJson(WiFi.SSID(), WiFi.psk(), WiFi.localIP().toString(), String(WiFi.RSSI()));
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
-        logger.e("Wifi is disconnected!");
+
         if (xSemaphoreTake(reconnectMutex, (TickType_t)10) == pdTRUE) {
             xTaskCreatePinnedToCore(wifiReconnect, "wifiReconnect", 3000, NULL, 1, NULL, 0);
         }
@@ -58,6 +58,7 @@ void wifiController::smartConfig(void *parameter) {
 }
 
 void wifiController::wifiReconnect(void *parameter) {
+    logger.e("Wifi is disconnected!");
     uint8_t wifiReconnectCount = 0;
     uint16_t delaytime = 3000;
     while (1) {
@@ -65,7 +66,11 @@ void wifiController::wifiReconnect(void *parameter) {
             break;
         if (wifiReconnectCount > 5)
             delaytime = 60000;
-
+        if (wifiReconnectCount == 10) {
+            WiFi.mode(WIFI_OFF);
+            logger.e("Wifi OFF!");
+        }
+        wifiReconnectCount++;
         instance->connect();
         vTaskDelay(delaytime);
     }
