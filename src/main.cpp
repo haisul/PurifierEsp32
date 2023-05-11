@@ -5,11 +5,10 @@
 #include "rgbled.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <QueueList.h>
-#include <WiFi.h>
 #include <cstdlib>
+#include <wifiController.h>
 
-LoggerESP logger;
+wifiController wifi;
 rgbLed Led;
 /////////////////////////////////////////////
 String chipid = String(ESP.getEfuseMac());
@@ -40,10 +39,7 @@ funcControl function;
 //////////////////////////////////////////////
 bool isTaskCreated = false;
 
-void smartConfig(void *pvParam);
-void connectToWifi();
-
-void task(void *pvParameters) {
+/*void task(void *pvParameters) {
     isTaskCreated = true;
     String From = ((String *)pvParameters)[0];
     String func = ((String *)pvParameters)[1];
@@ -60,7 +56,7 @@ void task(void *pvParameters) {
     delete[] ((String *)pvParameters);
     isTaskCreated = false;
     vTaskDelete(NULL);
-}
+}*/
 
 void msgProcess(String From, String msg) {
     Serial.printf("\n");
@@ -75,10 +71,17 @@ void msgProcess(String From, String msg) {
         set = msg.substring(index1 + 1);
     }
 
-    Serial.printf("From:%s\nfunc:%s\nset:%s\nstate:%s\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
+    /*Serial.printf("From:%s\nfunc:%s\nset:%s\nstate:%s\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
     if (!isTaskCreated) {
         String *params = new String[5]{From, func, set, state};
         xTaskCreatePinnedToCore(task, "task", 4096, (void *)params, 2, NULL, 0); // 1176 bytes
+    }*/
+    function.commend(func, set, state);
+    if (From != "HMIDev") {
+        if (From == "HMI")
+            function.refresh("MQTT");
+        if (From == "MQTT")
+            function.refresh("HMI");
     }
 }
 
@@ -108,13 +111,10 @@ void MCUcommender(String target) {
 
     if (target == "wifion" || target == "wifiInfo") {
         isWifiDisconnectCreated = false;
-        connectToWifi();
+        wifi.connect();
     } else if (target == "wifioff") {
         isWifiDisconnectCreated = true;
         WiFi.disconnect(true);
-    } else if (target == "wifiConfig") {
-        if (!isWifiSmartConfigCreated)
-            xTaskCreatePinnedToCore(smartConfig, "smartConfig", 3000, NULL, 1, NULL, 0);
     }
 }
 
@@ -122,37 +122,38 @@ void clock(void *pvParam) {
     String allTimerBuff, purTimerBuff, fogTimerBuff, uvcTimerBuff;
     StaticJsonDocument<384> j_timer;
     String timerStr;
+    uint32_t curTime = millis();
+
     while (1) {
-        if (function.all.startingCount) {
-            allTimerBuff = String(function.all.endEpoch - function.rtc.getEpoch());
+        if (function.all.countStart()) {
+            allTimerBuff = String(function.all.getEndTime() - rtc.getEpoch());
             HMI.sendMessage("settime.all_countTime.val=" + allTimerBuff);
             HMI.sendMessage("AdminDeveloper.n0.val=" + allTimerBuff);
             if (allTimerBuff == "0")
-                function.funcState(ALL, OFF, true);
+                function.commend("all", "state", "off");
         }
-        if (function.pur.startingCount && !function.all.startingCount) {
-            purTimerBuff = String(function.pur.endEpoch - function.rtc.getEpoch());
+        if (function.pur.countStart() && !function.all.countStart()) {
+            purTimerBuff = String(function.pur.getEndTime() - rtc.getEpoch());
             HMI.sendMessage("settime.pur_countTime.val=" + purTimerBuff);
             HMI.sendMessage("AdminDeveloper.n1.val=" + purTimerBuff);
             if (purTimerBuff == "0")
-                function.funcState(PUR, OFF, true);
+                function.commend("pur", "state", "off");
         }
-        if (function.fog.startingCount && !function.all.startingCount) {
-            fogTimerBuff = String(function.fog.endEpoch - function.rtc.getEpoch());
+        if (function.fog.countStart() && !function.all.countStart()) {
+            fogTimerBuff = String(function.fog.getEndTime() - rtc.getEpoch());
             HMI.sendMessage("settime.fog_countTime.val=" + fogTimerBuff);
             HMI.sendMessage("AdminDeveloper.n3.val=" + fogTimerBuff);
             if (fogTimerBuff == "0")
-                function.funcState(FOG, OFF, true);
+                function.commend("fog", "state", "off");
         }
-        if (function.uvc.startingCount && !function.all.startingCount) {
-            uvcTimerBuff = String(function.uvc.endEpoch - function.rtc.getEpoch());
+        if (function.uvc.countStart() && !function.all.countStart()) {
+            uvcTimerBuff = String(function.uvc.getEndTime() - rtc.getEpoch());
             HMI.sendMessage("settime.uvc_countTime.val=" + uvcTimerBuff);
             HMI.sendMessage("AdminDeveloper.n4.val=" + uvcTimerBuff);
             if (uvcTimerBuff == "0")
-                function.funcState(UVC, OFF, true);
+                function.commend("uvc", "state", "off");
         }
-        if (function.all.startingCount || function.pur.startingCount || function.fog.startingCount || function.uvc.startingCount) {
-
+        if (function.MachineCountStart() && millis() - curTime >= 30000) {
             j_timer["allCountTime"] = allTimerBuff;
             j_timer["purCountTime"] = purTimerBuff;
             j_timer["fogCountTime"] = fogTimerBuff;
@@ -162,9 +163,10 @@ void clock(void *pvParam) {
             mqttClient.sendMessage(mqttClient.getTopicTimer(), timerStr, 0);
             logger.i(timerStr.c_str());
             timerStr = "";
+            curTime = millis();
         }
 
-        vTaskDelay(30 * 1000);
+        vTaskDelay(100);
     }
 }
 
@@ -183,8 +185,7 @@ void dust(void *pvParam) {
             dustValStr = "999";
         else {
             dustValStr = (uint16_t)dustValAvg;
-            if (function._modeAuto)
-                function.getDustVal((uint16_t)dustValAvg);
+            function.pur.setDust((uint16_t)dustValAvg);
         }
         tempValStr = String(pms.n5p0 / 10);
         rhumValStr = String(pms.n10p0 / 10) + "." + String((pms.n10p0 - (pms.n10p0 / 10) * 10));
@@ -209,9 +210,6 @@ void dust(void *pvParam) {
 
 void local(void *pvParam) {
     vTaskDelay(2000);
-    function_mode_types func[4] = {ALL, PUR, FOG, UVC};
-    for (uint8_t i = 0; i < 4; i++)
-        function.funcState(func[i], OFF);
     while (1) {
         HMI.loop();
         vTaskDelay(50);
@@ -228,10 +226,11 @@ void mqttCallback(String &topic, String &payload) {
         if (topic == mqttClient.getTopicApp()) {
             if (mqttMsg == "delete") {
                 // mqttClient.disconnect();
-                function.reset();
-            } else
-                // msgProcess("MQTT", mqttMsg);
-                logger.w("Topic:%s\n Msg:%s", topic.c_str(), mqttMsg.c_str());
+                function.MachineReset();
+            } else {
+                msgProcess("MQTT", mqttMsg);
+                logger.w("Topic:%s\nMsg:%s", topic.c_str(), mqttMsg.c_str());
+            }
         }
     }
 }
@@ -240,43 +239,14 @@ void mqttCallback(String &topic, String &payload) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
-void connectToWifi() {
-    if (function.SSID != "" && function.PASSWORD != "") {
-        Serial.printf("SSID: %s\nPASSWORD: %s", function.SSID, function.PASSWORD);
-        WiFi.begin(function.SSID.c_str(), function.PASSWORD.c_str());
-        Serial.printf("connect wifi:%d", wifiReconnectCount);
-    } else if (!isWifiSmartConfigCreated)
-        xTaskCreatePinnedToCore(smartConfig, "smartConfig", 3000, NULL, 1, NULL, 0);
+void onWifiConnected() {
+    mqttClient.connectToMqtt(WiFi.SSID(), serialNum);
+    HMI.sendMessage("setwifi.wifiInfo.txt=\"" + HMI.escapeJson(wifi.getInfo()) + "\"");
+    HMI.sendMessage("AdminSerial.serialTemp.txt=\"" + HMI.escapeJson(wifi.getInfo()) + "\"");
 }
 
-void wifiDisconnect(void *pvParam) {
-    isWifiDisconnectCreated = true;
-    if (wifiReconnectCount < 5)
-        vTaskDelay(pdMS_TO_TICKS(3000));
-    else
-        vTaskDelay(pdMS_TO_TICKS(60000));
-    connectToWifi();
-    isWifiDisconnectCreated = false;
-    vTaskDelete(NULL);
-}
-
-void smartConfig(void *pvParam) {
-    int smartConfigTime = millis();
-    isWifiSmartConfigCreated = true;
-    Serial.printf("SmartConfig %s !\n", WiFi.beginSmartConfig() ? "start" : "end");
-    while (millis() - smartConfigTime < 120 * 1000) {
-        if (WiFi.isConnected()) {
-            Serial.println("smartConfigDone");
-            break;
-        }
-        vTaskDelay(100);
-    }
-
-    WiFi.stopSmartConfig();
-    Serial.println("SmartConfig end!");
-    isWifiSmartConfigCreated = false;
-    vTaskDelete(NULL);
-}
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*void OTAServer() {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -286,30 +256,6 @@ void smartConfig(void *pvParam) {
     server.begin();
     Serial.printf("OTA Server Start!\n");
 }*/
-
-void WiFiEvent(WiFiEvent_t event) {
-    Serial.printf("[WiFi-event] event: %d\n", event);
-    switch (event) {
-    case SYSTEM_EVENT_STA_GOT_IP:
-        Serial.printf("WiFi connected");
-        function.wifiSaveToJson(WiFi.SSID(), WiFi.psk(), WiFi.localIP().toString(), String(WiFi.RSSI()));
-        ////////////////////////////////////////////////////////////////////////////////////////////
-        HMI.sendMessage("setwifi.wifiInfo.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
-        HMI.sendMessage("AdminSerial.serialTemp.txt=\"" + HMI.escapeJson(function.getWifiInfo()) + "\"");
-        Serial.printf("%s", function.getWifiInfo().c_str());
-        mqttClient.connectToMqtt(WiFi.SSID(), serialNum);
-        //  paireTopic = WiFi.SSID();
-        //   OTAServer();
-        wifiReconnectCount = 0;
-        break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-        if (!isWifiDisconnectCreated) {
-            xTaskCreatePinnedToCore(wifiDisconnect, "wifiDisconnect", 8192, NULL, 1, NULL, 0);
-            wifiReconnectCount++;
-        }
-        break;
-    }
-}
 
 void buttonInterrupt(void *Param) {
     uint16_t buttonState = analogRead(powerSignal);
@@ -329,21 +275,14 @@ void buttonInterrupt(void *Param) {
                 } else {
                     HMI.sendMessage("thup=0");
                     HMI.sendMessage("sleep=1");
-                    if (function.all.state)
-                        function.commend("all", "state", "off");
-                    if (function.pur.state)
-                        function.commend("pur", "state", "off");
-                    if (function.fog.state)
-                        function.commend("fog", "state", "off");
-                    if (function.uvc.state)
-                        function.commend("uvc", "state", "off");
+                    function.commend("all", "state", "off");
                     digitalWrite(powerSupply, LOW);
                 }
                 jumpTime = millis();
             }
         }
 
-        if (function.all.state || function.pur.state || function.fog.state || function.uvc.state) {
+        if (function.MachineState()) {
             currentTime = millis();
         }
         if (millis() - currentTime > 300 * 1000 && POWER_ON) {
@@ -357,7 +296,8 @@ void buttonInterrupt(void *Param) {
 }
 
 void setup() {
-    // Serial.begin(115200);
+    Serial.begin(115200);
+
     pinMode(LEDpin, OUTPUT);
     pmsSerial.begin(9600, SERIAL_8E1, 5, 18);
     pms.init();
@@ -365,13 +305,11 @@ void setup() {
     pinMode(powerSignal, INPUT_PULLDOWN);
     pinMode(powerSupply, OUTPUT);
     ///////////////////////////////////////
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.onEvent(WiFiEvent);
+    wifi.setWiFiConnectedCallback(onWifiConnected);
+    wifi.connect();
 
     mqttClient.mqttCallback(mqttCallback);
     ///////////////////////////////////////
-    function.initialWifi();
-    connectToWifi();
 
     HMI.SetCallback(HmiCallback);
     function.setMCUcommender(MCUcommender);
@@ -390,13 +328,9 @@ void loop() {
         char c = Serial.read();
         if (c == '\n') {
             msgBuffer.trim();
-            if (msgBuffer == "smartConfig") {
+            if (msgBuffer == "reset") {
                 delay(1000);
-                if (!isWifiSmartConfigCreated)
-                    xTaskCreatePinnedToCore(smartConfig, "smartConfig", 3000, NULL, 1, NULL, 0);
-            } else if (msgBuffer == "reset") {
-                delay(1000);
-                function.reset();
+                function.MachineReset();
             } else if (msgBuffer.startsWith("commend:")) {
                 msgBuffer.replace("commend:", "");
                 msgProcess("HMI", msgBuffer);

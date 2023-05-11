@@ -1,5 +1,5 @@
 #include "loggerESP.h"
-
+LoggerESP logger;
 LoggerESP::LoggerESP() {
     Serial.begin(115200);
 }
@@ -32,7 +32,6 @@ void LoggerESP::warring(const char *file, int line, const char *func, const char
 
     formatBuf(buf);
     printLog(WARRING, "WARRING", file, line, func, buf);
-    delete[] buf;
 }
 
 void LoggerESP::error(const char *file, int line, const char *func, const char *format, ...) {
@@ -48,7 +47,6 @@ void LoggerESP::error(const char *file, int line, const char *func, const char *
 
     formatBuf(buf);
     printLog(ERROR, "ERROR", file, line, func, buf);
-    delete[] buf;
 }
 
 char *LoggerESP::formatBuf(char *(&buf)) {
@@ -65,10 +63,11 @@ char *LoggerESP::formatBuf(char *(&buf)) {
     strcpy(tmp, buf);
     for (int i = 0; i < tmp_len; i++) {
         if (tmp[i] == '\n') {
+            memmove(tmp + i + 4, tmp + i + 1, tmp_len - i - 4);
             tmp[i + 1] = '|';
             tmp[i + 2] = ' ';
             tmp[i + 3] = ' ';
-            i += 3;
+            i += 4;
             tmp[tmp_len] = '\0';
         }
     }

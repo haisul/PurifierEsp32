@@ -1,18 +1,21 @@
 #include "function.h"
+ESP32Time rtc;
 
 Function::Function() {}
 
 void Function::power(bool status) {
     state = status;
     if (state && countState) {
-        countStart();
+        endTime = rtc.getEpoch() + time;
+        startingCount = true;
     }
 }
 
 void Function::count(bool status) {
     countState = status;
     if (state && countState) {
-        countStart();
+        endTime = rtc.getEpoch() + time;
+        startingCount = true;
     }
 }
 
@@ -20,10 +23,34 @@ void Function::setTime(uint32_t time) {
     this->time = time;
 }
 
-void Function::countStart() {
-    endEpoch = rtc.getEpoch() + time;
+bool Function::countStart() { return startingCount; }
+
+JsonVariant Function::getVariable() {
+    StaticJsonDocument<128> j_initial;
+    j_initial["state"] = state;
+    j_initial["countState"] = countState;
+    j_initial["time"] = time;
+
+    return j_initial;
 }
 
+void Function::setVariable(JsonVariant j_initial) {
+    StaticJsonDocument<128> doc;
+    DeserializationError error = deserializeJson(doc, j_initial);
+
+    if (error)
+        return;
+
+    // state = doc["state"];
+    countState = doc["countState"];
+    time = doc["time"];
+}
+
+bool Function::getState() { return state; }
+
+uint16_t Function::getEndTime() { return endTime; }
+
+///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 
 Purifier::Purifier() : Function() {
@@ -35,20 +62,28 @@ Purifier::Purifier() : Function() {
 }
 
 void Purifier::power(bool status) {
-    if (status) {
-        vTaskDelay(500);
-        digitalWrite(purifier, HIGH);
-    } else {
-        vTaskDelay(500);
-        digitalWrite(purifier, LOW);
-    }
     state = status;
     if (state && countState) {
-        countStart();
+        endTime = rtc.getEpoch() + time;
+        startingCount = true;
     }
+    Purifier *params = this;
+    xTaskCreatePinnedToCore(powerControl, "powerControl", 2048, (void *)params, 1, NULL, 0);
 }
 
-void Purifier::changeMode(MODE mode) {
+void Purifier::powerControl(void *pvParam) {
+    Purifier *instance = static_cast<Purifier *>(pvParam);
+    if (instance->state) {
+        vTaskDelay(500);
+        digitalWrite(instance->purifier, HIGH);
+    } else {
+        vTaskDelay(500);
+        digitalWrite(instance->purifier, LOW);
+    }
+    vTaskDelete(NULL);
+}
+
+void Purifier::setMode(MODE mode) {
     modeState = mode;
     switch (mode) {
     case autoMode:
@@ -71,10 +106,41 @@ void Purifier::changeMode(MODE mode) {
     ledcWrite(PWMchannel, dutycycle);
 }
 
-void Purifier::getDust(uint16_t val) {
+void Purifier::setDust(uint16_t val) {
     dustVal = val;
-    changeMode(autoMode);
+    setMode(AutoMode);
 }
+
+void Purifier::setDuty(uint16_t val) {
+    manualDutycycle = val;
+    setMode(ManualMode);
+}
+
+JsonVariant Purifier::getVariable() {
+    StaticJsonDocument<128> j_initial;
+    j_initial["state"] = state;
+    j_initial["countState"] = countState;
+    j_initial["time"] = time;
+    j_initial["mode"] = modeState;
+
+    return j_initial;
+}
+
+void Purifier::setVariable(JsonVariant j_initial) {
+    StaticJsonDocument<128> doc;
+    DeserializationError error = deserializeJson(doc, j_initial);
+
+    if (error)
+        return;
+
+    // state = doc["state"];
+    countState = doc["countState"];
+    time = doc["time"];
+    modeState = doc["mode"];
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
 
 FogMachine::FogMachine() : Function() {
     pinMode(fogpump, OUTPUT);    // Relay1-8 fog Pump
@@ -83,22 +149,43 @@ FogMachine::FogMachine() : Function() {
 }
 
 void FogMachine::power(bool status) {
-    if (status) {
-        digitalWrite(fogMachine, HIGH);
-        vTaskDelay(500);
-        digitalWrite(fogpump, HIGH);
-        digitalWrite(fogfan, HIGH);
-    } else {
-        digitalWrite(fogMachine, LOW);
-        vTaskDelay(2000);
-        digitalWrite(fogpump, LOW);
-        digitalWrite(fogfan, LOW);
-    }
     state = status;
     if (state && countState) {
-        countStart();
+        endTime = rtc.getEpoch() + time;
+        startingCount = true;
+    }
+    FogMachine *params = this;
+    xTaskCreatePinnedToCore(powerControl, "powerControl", 2048, (void *)params, 1, NULL, 0);
+}
+
+void FogMachine::powerControl(void *pvParam) {
+    FogMachine *instance = static_cast<FogMachine *>(pvParam);
+    if (instance->state) {
+        digitalWrite(instance->fogMachine, HIGH);
+        vTaskDelay(500);
+        digitalWrite(instance->fogpump, HIGH);
+        digitalWrite(instance->fogfan, HIGH);
+    } else {
+        digitalWrite(instance->fogMachine, LOW);
+        vTaskDelay(2000);
+        digitalWrite(instance->fogpump, LOW);
+        digitalWrite(instance->fogfan, LOW);
+    }
+    vTaskDelete(NULL);
+}
+
+void FogMachine::increment(String set, bool status) {
+    if (set = "fogMachine") {
+        digitalWrite(fogMachine, status);
+    } else if (set = "fogpump") {
+        digitalWrite(fogpump, status);
+    } else if (set = "fogfan") {
+        digitalWrite(fogfan, status);
     }
 }
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
 
 UvcLamp::UvcLamp() : Function() {
     pinMode(ecin, OUTPUT);   // L298NA-IN1 ec Direction
@@ -107,24 +194,52 @@ UvcLamp::UvcLamp() : Function() {
 }
 
 void UvcLamp::power(bool status) {
-    if (status) {
-        digitalWrite(ecin, LOW);
-        digitalWrite(ecout, LOW);
-        digitalWrite(uvLamp, HIGH);
-        digitalWrite(ecout, HIGH);
-        vTaskDelay(6000);
-        digitalWrite(ecout, LOW);
-    } else {
-        digitalWrite(ecin, LOW);
-        digitalWrite(ecout, LOW);
-        digitalWrite(uvLamp, LOW);
-        digitalWrite(ecin, HIGH);
-        vTaskDelay(6000);
-        digitalWrite(ecin, LOW);
-    }
     state = status;
     if (state && countState) {
-        countStart();
+        endTime = rtc.getEpoch() + time;
+        startingCount = true;
+    }
+    UvcLamp *params = this;
+    xTaskCreatePinnedToCore(powerControl, "powerControl", 2048, (void *)params, 1, NULL, 0);
+}
+
+void UvcLamp::powerControl(void *pvParam) {
+    UvcLamp *instance = static_cast<UvcLamp *>(pvParam);
+    if (instance->state) {
+        digitalWrite(instance->ecin, LOW);
+        digitalWrite(instance->ecout, LOW);
+        digitalWrite(instance->uvLamp, HIGH);
+        digitalWrite(instance->ecout, HIGH);
+        vTaskDelay(6000);
+        digitalWrite(instance->ecout, LOW);
+    } else {
+        digitalWrite(instance->ecin, LOW);
+        digitalWrite(instance->ecout, LOW);
+        digitalWrite(instance->uvLamp, LOW);
+        digitalWrite(instance->ecin, HIGH);
+        vTaskDelay(6000);
+        digitalWrite(instance->ecin, LOW);
+    }
+    vTaskDelete(NULL);
+}
+
+void UvcLamp::increment(String set, bool status) {
+    if (set = "ec") {
+        if (status) {
+            digitalWrite(ecin, LOW);
+            digitalWrite(ecout, LOW);
+            digitalWrite(ecout, HIGH);
+            vTaskDelay(200);
+            digitalWrite(ecout, LOW);
+        } else {
+            digitalWrite(ecin, LOW);
+            digitalWrite(ecout, LOW);
+            digitalWrite(ecin, HIGH);
+            vTaskDelay(200);
+            digitalWrite(ecin, LOW);
+        }
+    } else if (set = "light") {
+        digitalWrite(uvLamp, status);
     }
 }
 

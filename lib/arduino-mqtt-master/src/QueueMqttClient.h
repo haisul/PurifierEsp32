@@ -12,8 +12,6 @@
 
 class QueueMQTTClient {
 private:
-    LoggerESP logger;
-
     typedef enum {
         qos0 = 0,
         qos1,
@@ -28,7 +26,6 @@ private:
 
     MQTTClient mqttClient = MQTTClient(1024);
     WiFiClientSecure secureClient;
-    WiFiClient client;
     QueueList QoS0_Queue, QoS1_Queue, QoS2_Queue;
 
     MQTT_CALLBACK_SIGNATURE;

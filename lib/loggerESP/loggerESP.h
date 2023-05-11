@@ -23,4 +23,6 @@ private:
     void printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, char *(&buf));
 };
 
+extern LoggerESP logger;
+
 #endif
