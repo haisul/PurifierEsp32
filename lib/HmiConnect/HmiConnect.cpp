@@ -1,5 +1,4 @@
 #include "HmiConnect.h"
-#include <Arduino.h>
 
 HmiConnect::HmiConnect(HardwareSerial HMI, int monitor_speed) : _HMI(HMI), _monitor_speed(monitor_speed) {
     _HMI.begin(monitor_speed);
@@ -48,6 +47,7 @@ void HmiConnect::loop() {
 }
 
 void HmiConnect::sendMessage(String HMI_msg) {
+    logger.w(HMI_msg.c_str());
     _HMI.printf("%s\xff\xff\xff", HMI_msg.c_str());
 }
 

@@ -74,6 +74,7 @@ void wifiController::wifiReconnect(void *parameter) {
         instance->connect();
         vTaskDelay(delaytime);
     }
+    xSemaphoreGive(instance->reconnectMutex);
     vTaskDelete(NULL);
 }
 

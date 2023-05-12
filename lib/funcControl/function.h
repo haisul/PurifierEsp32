@@ -25,7 +25,8 @@ protected:
     bool countState = false;
     bool startingCount = false;
     uint32_t time = 1800;
-    uint32_t endTime;
+    int32_t countTime;
+    int32_t endTime;
 
 public:
     Function(String);
@@ -36,7 +37,7 @@ public:
     void setTime(uint32_t);
     bool countStart();
     bool getState();
-    uint16_t getEndTime();
+    int32_t getCountTime();
 };
 
 //////////////////////////////////////////////////
@@ -54,8 +55,9 @@ private:
     uint8_t dutycycle = 30;
     uint16_t dustVal = 0;
     uint8_t manualDutycycle = 30;
-
     MODE modeState = autoMode;
+
+    static SemaphoreHandle_t purPowerControlMutex;
     static void purPowerControl(void *pvParam);
 
 public:
@@ -63,7 +65,7 @@ public:
     void power(bool) override;
     void setMode(MODE);
     void setDust(uint16_t);
-    void setDuty(uint16_t);
+    void setDuty(uint8_t);
     void setVariable(JsonVariant) override;
     JsonVariant getVariable() override;
 };
@@ -77,6 +79,7 @@ private:
     const uint8_t fogfan = 14;
     const uint8_t fogMachine = 32;
 
+    static SemaphoreHandle_t fogPowerControlMutex;
     static void fogPowerControl(void *pvParam);
 
 public:
@@ -94,6 +97,7 @@ private:
     const uint8_t ecout = 27;
     const uint8_t uvLamp = 22;
 
+    static SemaphoreHandle_t uvcPowerControlMutex;
     static void uvcPowerControl(void *pvParam);
 
 public:

@@ -1,5 +1,6 @@
 #ifndef __HMICONNECT_
 #define __HMICONNECT_
+#include "loggerESP.h"
 #include <Arduino.h>
 
 #define HMI_CALLBACK_SIGNATURE std::function<void(String)> hmi_callback

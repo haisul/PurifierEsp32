@@ -1,6 +1,10 @@
 #include "function.h"
 ESP32Time rtc;
 
+SemaphoreHandle_t Purifier::purPowerControlMutex = xSemaphoreCreateMutex();
+SemaphoreHandle_t FogMachine::fogPowerControlMutex = xSemaphoreCreateMutex();
+SemaphoreHandle_t UvcLamp::uvcPowerControlMutex = xSemaphoreCreateMutex();
+
 Function::Function(String name) {
     this->name = name;
 }
@@ -11,9 +15,8 @@ void Function::power(bool status) {
         endTime = rtc.getEpoch() + time;
         startingCount = true;
         logger.i("%s startingCount", name.c_str());
-    } else {
+    } else if (!state)
         startingCount = false;
-    }
     logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
@@ -23,14 +26,15 @@ void Function::count(bool status) {
         endTime = rtc.getEpoch() + time;
         startingCount = true;
         logger.i("%s startingCount", name.c_str());
-    } else {
+    } else if (!countState)
         startingCount = false;
-    }
-    logger.i("%s COUNT:%s", name.c_str(), state ? "ON" : "OFF");
+    logger.i("%s COUNT:%s", name.c_str(), countState ? "ON" : "OFF");
 }
 
 void Function::setTime(uint32_t time) {
     this->time = time;
+    this->countTime = time;
+    endTime = rtc.getEpoch() + time;
     logger.i("%s TIME:%d", name.c_str(), time);
 }
 
@@ -46,19 +50,20 @@ JsonVariant Function::getVariable() {
 }
 
 void Function::setVariable(JsonVariant j_initial) {
-    StaticJsonDocument<128> doc;
-    DeserializationError error = deserializeJson(doc, j_initial);
-
-    if (error)
-        return;
-
-    countState = doc["countState"];
-    time = doc["time"];
+    countState = j_initial["countState"];
+    time = j_initial["time"];
 }
 
 bool Function::getState() { return state; }
 
-uint16_t Function::getEndTime() { return endTime; }
+int32_t Function::getCountTime() {
+    if (startingCount) {
+        countTime = endTime - rtc.getEpoch();
+        if (countTime < 0)
+            startingCount = false;
+    }
+    return countTime;
+}
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
@@ -69,17 +74,22 @@ Purifier::Purifier(String name) : Function(name) {
     digitalWrite(purifier, LOW);
     ledcAttachPin(PWMpin, PWMchannel);
     ledcSetup(PWMchannel, freq, resolution);
+
+    purPowerControlMutex = xSemaphoreCreateBinary();
+    xSemaphoreGive(purPowerControlMutex);
 }
 
 void Purifier::power(bool status) {
-    state = status;
-    if (state && countState) {
-        endTime = rtc.getEpoch() + time;
-        startingCount = true;
+    if (xSemaphoreTake(purPowerControlMutex, (TickType_t)10) == pdTRUE) {
+        state = status;
+        if (state && countState) {
+            endTime = rtc.getEpoch() + time;
+            startingCount = true;
+        }
+        Purifier *params = this;
+        xTaskCreatePinnedToCore(purPowerControl, "purPowerControl", 2048, (void *)params, 1, NULL, 0);
+        logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
     }
-    Purifier *params = this;
-    xTaskCreatePinnedToCore(purPowerControl, "purPowerControl", 2048, (void *)params, 1, NULL, 0);
-    logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
 void Purifier::purPowerControl(void *pvParam) {
@@ -91,7 +101,7 @@ void Purifier::purPowerControl(void *pvParam) {
         vTaskDelay(500);
         digitalWrite(instance->purifier, LOW);
     }
-
+    xSemaphoreGive(instance->purPowerControlMutex);
     vTaskDelete(NULL);
 }
 
@@ -123,14 +133,16 @@ void Purifier::setMode(MODE mode) {
 
 void Purifier::setDust(uint16_t val) {
     dustVal = val;
-    if (modeState == autoMode)
+    if (modeState == AutoMode)
         setMode(AutoMode);
 }
 
-void Purifier::setDuty(uint16_t val) {
+void Purifier::setDuty(uint8_t val) {
     manualDutycycle = val;
-    setMode(ManualMode);
-    logger.i("%s DUTY:%s", name.c_str(), val);
+    if (modeState == ManualMode) {
+        setMode(ManualMode);
+        logger.i("%s DUTY:%d", name.c_str(), val);
+    }
 }
 
 JsonVariant Purifier::getVariable() {
@@ -144,16 +156,9 @@ JsonVariant Purifier::getVariable() {
 }
 
 void Purifier::setVariable(JsonVariant j_initial) {
-    StaticJsonDocument<128> doc;
-    DeserializationError error = deserializeJson(doc, j_initial);
-
-    if (error)
-        return;
-
-    // state = doc["state"];
-    countState = doc["countState"];
-    time = doc["time"];
-    modeState = doc["mode"];
+    countState = j_initial["countState"];
+    time = j_initial["time"];
+    modeState = j_initial["mode"];
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -163,17 +168,22 @@ FogMachine::FogMachine(String name) : Function(name) {
     pinMode(fogpump, OUTPUT);    // Relay1-8 fog Pump
     pinMode(fogfan, OUTPUT);     // Relay1-7 fog Fan
     pinMode(fogMachine, OUTPUT); // Relay2-2 fog Machine
+
+    fogPowerControlMutex = xSemaphoreCreateBinary();
+    xSemaphoreGive(fogPowerControlMutex);
 }
 
 void FogMachine::power(bool status) {
-    state = status;
-    if (state && countState) {
-        endTime = rtc.getEpoch() + time;
-        startingCount = true;
+    if (xSemaphoreTake(fogPowerControlMutex, (TickType_t)10) == pdTRUE) {
+        state = status;
+        if (state && countState) {
+            endTime = rtc.getEpoch() + time;
+            startingCount = true;
+        }
+        FogMachine *params = this;
+        xTaskCreatePinnedToCore(fogPowerControl, "fogPowerControl", 2048, (void *)params, 1, NULL, 0);
+        logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
     }
-    FogMachine *params = this;
-    xTaskCreatePinnedToCore(fogPowerControl, "fogPowerControl", 2048, (void *)params, 1, NULL, 0);
-    logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
 void FogMachine::fogPowerControl(void *pvParam) {
@@ -189,6 +199,7 @@ void FogMachine::fogPowerControl(void *pvParam) {
         digitalWrite(instance->fogpump, LOW);
         digitalWrite(instance->fogfan, LOW);
     }
+    xSemaphoreGive(instance->fogPowerControlMutex);
     vTaskDelete(NULL);
 }
 
@@ -209,17 +220,22 @@ UvcLamp::UvcLamp(String name) : Function(name) {
     pinMode(ecin, OUTPUT);   // L298NA-IN1 ec Direction
     pinMode(ecout, OUTPUT);  // L298NA-IN2 ec Direction
     pinMode(uvLamp, OUTPUT); // Relay1-1 uv Lamp
+
+    uvcPowerControlMutex = xSemaphoreCreateBinary();
+    xSemaphoreGive(uvcPowerControlMutex);
 }
 
 void UvcLamp::power(bool status) {
-    state = status;
-    if (state && countState) {
-        endTime = rtc.getEpoch() + time;
-        startingCount = true;
+    if (xSemaphoreTake(uvcPowerControlMutex, (TickType_t)10) == pdTRUE) {
+        state = status;
+        if (state && countState) {
+            endTime = rtc.getEpoch() + time;
+            startingCount = true;
+        }
+        UvcLamp *params = this;
+        xTaskCreatePinnedToCore(uvcPowerControl, "uvcPowerControl", 2048, (void *)params, 1, NULL, 0);
+        logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
     }
-    UvcLamp *params = this;
-    xTaskCreatePinnedToCore(uvcPowerControl, "uvcPowerControl", 2048, (void *)params, 1, NULL, 0);
-    logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
 void UvcLamp::uvcPowerControl(void *pvParam) {
@@ -239,6 +255,7 @@ void UvcLamp::uvcPowerControl(void *pvParam) {
         vTaskDelay(6000);
         digitalWrite(instance->ecin, LOW);
     }
+    xSemaphoreGive(instance->uvcPowerControlMutex);
     vTaskDelete(NULL);
 }
 

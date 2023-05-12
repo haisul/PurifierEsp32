@@ -66,7 +66,7 @@ bool QueueMQTTClient::loadTopic() {
     topicTimer = doc["topicTimer"].as<String>();
 
     mqttClient.subscribe(topicApp);
-    logger.i("loadTopic success");
+    logger.i("%s\n%s\n%s\n%s", topicApp.c_str(), topicEsp.c_str(), topicPms.c_str(), topicTimer.c_str());
     return true;
 }
 

@@ -117,59 +117,70 @@ void MCUcommender(String target) {
         WiFi.disconnect(true);
     }
 }
-
+String timerStrBuf;
 void clock(void *pvParam) {
-    String allTimerBuff, purTimerBuff, fogTimerBuff, uvcTimerBuff;
+    int32_t allTimeBuf, purTimeBuf, fogTimeBuf, uvcTimeBuf;
     StaticJsonDocument<384> j_timer;
     String timerStr;
     uint32_t curTime = millis();
 
     while (1) {
         if (function.all.countStart()) {
-            allTimerBuff = String(function.all.getEndTime() - rtc.getEpoch());
-            HMI.sendMessage("settime.all_countTime.val=" + allTimerBuff);
-            HMI.sendMessage("AdminDeveloper.n0.val=" + allTimerBuff);
-            if (allTimerBuff == "0")
+            allTimeBuf = function.all.getCountTime();
+            if (allTimeBuf < 0) {
                 function.commend("all", "state", "off");
+            } else {
+                HMI.sendMessage("settime.all_countTime.val=" + String(allTimeBuf));
+                HMI.sendMessage("AdminDeveloper.n1.val=" + String(allTimeBuf));
+            }
         }
-        if (function.pur.countStart() && !function.all.countStart()) {
-            purTimerBuff = String(function.pur.getEndTime() - rtc.getEpoch());
-            HMI.sendMessage("settime.pur_countTime.val=" + purTimerBuff);
-            HMI.sendMessage("AdminDeveloper.n1.val=" + purTimerBuff);
-            if (purTimerBuff == "0")
+        if (function.pur.countStart() && !function.all.getState()) {
+            purTimeBuf = function.pur.getCountTime();
+            if (purTimeBuf < 0) {
                 function.commend("pur", "state", "off");
+            } else {
+                HMI.sendMessage("settime.pur_countTime.val=" + String(purTimeBuf));
+                HMI.sendMessage("AdminDeveloper.n2.val=" + String(purTimeBuf));
+            }
         }
-        if (function.fog.countStart() && !function.all.countStart()) {
-            fogTimerBuff = String(function.fog.getEndTime() - rtc.getEpoch());
-            HMI.sendMessage("settime.fog_countTime.val=" + fogTimerBuff);
-            HMI.sendMessage("AdminDeveloper.n3.val=" + fogTimerBuff);
-            if (fogTimerBuff == "0")
+        if (function.fog.countStart() && !function.all.getState()) {
+            fogTimeBuf = function.fog.getCountTime();
+            if (fogTimeBuf < 0) {
                 function.commend("fog", "state", "off");
+
+            } else {
+                HMI.sendMessage("settime.fog_countTime.val=" + String(fogTimeBuf));
+                HMI.sendMessage("AdminDeveloper.n3.val=" + String(fogTimeBuf));
+            }
         }
-        if (function.uvc.countStart() && !function.all.countStart()) {
-            uvcTimerBuff = String(function.uvc.getEndTime() - rtc.getEpoch());
-            HMI.sendMessage("settime.uvc_countTime.val=" + uvcTimerBuff);
-            HMI.sendMessage("AdminDeveloper.n4.val=" + uvcTimerBuff);
-            if (uvcTimerBuff == "0")
+        if (function.uvc.countStart() && !function.all.getState()) {
+            uvcTimeBuf = function.uvc.getCountTime();
+            if (uvcTimeBuf < 0) {
                 function.commend("uvc", "state", "off");
+
+            } else {
+                HMI.sendMessage("settime.uvc_countTime.val=" + String(uvcTimeBuf));
+                HMI.sendMessage("AdminDeveloper.n4.val=" + String(uvcTimeBuf));
+            }
         }
         if (function.MachineCountStart() && millis() - curTime >= 30000) {
-            j_timer["allCountTime"] = allTimerBuff;
-            j_timer["purCountTime"] = purTimerBuff;
-            j_timer["fogCountTime"] = fogTimerBuff;
-            j_timer["uvcCountTime"] = uvcTimerBuff;
+            j_timer["allCountTime"] = allTimeBuf;
+            j_timer["purCountTime"] = purTimeBuf;
+            j_timer["fogCountTime"] = fogTimeBuf;
+            j_timer["uvcCountTime"] = uvcTimeBuf;
 
             serializeJson(j_timer, timerStr);
             mqttClient.sendMessage(mqttClient.getTopicTimer(), timerStr, 0);
             logger.i(timerStr.c_str());
+            timerStrBuf = timerStr;
             timerStr = "";
             curTime = millis();
         }
 
-        vTaskDelay(100);
+        vTaskDelay(1000);
     }
 }
-
+String pmsStrBuf;
 void dust(void *pvParam) {
     String dustValStr = "0", tempValStr = "0", rhumValStr = "0";
     double dustValAvg = 0;
@@ -189,7 +200,7 @@ void dust(void *pvParam) {
         tempValStr = String(pms.n5p0 / 10);
         rhumValStr = String(pms.n10p0 / 10) + "." + String((pms.n10p0 - (pms.n10p0 / 10) * 10));
 
-        if (abs(dustValAvg - dustValTemp) / dustValTemp >= 0.1) {
+        //if (abs(dustValAvg - dustValTemp) / dustValTemp >= 0.1) {
             function.pur.setDust((uint16_t)dustValAvg);
 
             HMI.sendMessage("home.pm25.txt=\"" + dustValStr + "\"");
@@ -202,8 +213,9 @@ void dust(void *pvParam) {
 
             serializeJson(j_pms, pmsStr);
             mqttClient.sendMessage(mqttClient.getTopicPms(), pmsStr, 0);
+            pmsStrBuf = pmsStr;
             pmsStr = "";
-        }
+        //}
         dustValTemp = (uint16_t)dustValAvg;
         vTaskDelay(1000);
     }
@@ -304,7 +316,7 @@ void setup() {
     pmsSerial.begin(9600, SERIAL_8E1, 5, 18);
     pms.init();
     ///////////////////////////////////////
-    
+
     pinMode(powerSignal, INPUT_PULLDOWN);
     pinMode(powerSupply, OUTPUT);
     ///////////////////////////////////////
@@ -346,8 +358,11 @@ void loop() {
             } else if (msgBuffer.startsWith("!")) {
                 msgBuffer.remove(0, 1);
                 HmiCallback(msgBuffer);
-            } else if ("print") {
+            } else if (msgBuffer == "print") {
                 logger.i("The quick brown fox jumps over the lazy dog.\nThis is a well-known sentence that is often used to demonstrate typing or font styles. However, it is more than just a typing exercise. The sentence contains every letter of the English alphabet, making it a pangram. Pangrams are a fun way to test your typing skills, and they can also be used in design and typography to showcase different typefaces. In addition to pangrams, there are many other interesting linguistic phenomena in the English language, such as palindromes, anagrams, and tongue twisters");
+            } else if (msgBuffer == "json") {
+                mqttClient.sendMessage(mqttClient.getTopicPms(), pmsStrBuf, 0);
+                mqttClient.sendMessage(mqttClient.getTopicTimer(), timerStrBuf, 0);
             }
             msgBuffer = "";
             break;

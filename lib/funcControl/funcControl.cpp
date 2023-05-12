@@ -128,7 +128,7 @@ void funcControl::saveToJson() {
     String initialStr;
     serializeJson(j_initial, initialStr);
     writeFile2(LittleFS, "/initial/initial.txt", initialStr.c_str());
-    logger.i("saveToJson Complete!");
+    // logger.i("saveToJson Complete!");
 }
 
 /*void funcControl::saveToJson() {

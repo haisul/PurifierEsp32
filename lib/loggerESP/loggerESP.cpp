@@ -52,7 +52,8 @@ void LoggerESP::error(const char *file, int line, const char *func, const char *
 char *LoggerESP::formatBuf(char *(&buf)) {
     const int MAX_LINE_LENGTH = 100;
     int len = strlen(buf);
-    int addSize = 0;
+    int addSize = len % MAX_LINE_LENGTH;
+
     for (int i = 0; i < len; i++) {
         if (buf[i] == '\n') {
             addSize += 3;
@@ -72,7 +73,7 @@ char *LoggerESP::formatBuf(char *(&buf)) {
         if (lineCount >= MAX_LINE_LENGTH) {
             memmove(tmp + i + 2, tmp + i + 1, tmp_len - i - 2);
             tmp[i + 1] = '\n';
-            //i++;
+            i++;
             lineCount = 0;
         }
         if (tmp[i] == '\n') {
@@ -92,7 +93,7 @@ char *LoggerESP::formatBuf(char *(&buf)) {
 }
 
 void LoggerESP::printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, char *(&buf)) {
-    String line1="=", line2;
+    String line1 = "=", line2;
     for (int i = 0; i < 109; i++) {
         line1 += "=";
         line2 += "-";
