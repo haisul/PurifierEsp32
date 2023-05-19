@@ -25,8 +25,12 @@ protected:
     bool countState = false;
     bool startingCount = false;
     uint32_t time = 1800;
-    int32_t countTime;
+    int32_t countTime = 0;
     int32_t endTime;
+
+    bool isInAction = false;
+
+    StaticJsonDocument<128> j_initial;
 
 public:
     Function(String);
@@ -38,6 +42,8 @@ public:
     bool countStart();
     bool getState();
     int32_t getCountTime();
+    int32_t getTime();
+    bool inAction();
 };
 
 //////////////////////////////////////////////////
@@ -60,6 +66,8 @@ private:
     static SemaphoreHandle_t purPowerControlMutex;
     static void purPowerControl(void *pvParam);
 
+    TaskHandle_t taskHandle;
+
 public:
     Purifier(String);
     void power(bool) override;
@@ -77,6 +85,9 @@ class FogMachine : public Function {
 private:
     const uint8_t fogpump = 12;
     const uint8_t fogfan = 14;
+    // when use Jtag debugger, the pin number is different
+    //  const uint8_t fogpump = 19;
+    //  const uint8_t fogfan = 21;
     const uint8_t fogMachine = 32;
 
     static SemaphoreHandle_t fogPowerControlMutex;

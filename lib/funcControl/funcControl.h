@@ -41,6 +41,7 @@ public:
     void MachineReset();
     bool MachineState();
     bool MachineCountStart();
+    bool MachineAction();
 
     String getInitialJson();
     funcControl &setMCUcommender(MCU_COMMENDER_SIGNATURE);

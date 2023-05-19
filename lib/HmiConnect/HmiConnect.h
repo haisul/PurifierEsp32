@@ -16,12 +16,18 @@ private:
     HMI_CALLBACK_SIGNATURE;
     HMI_DEVELOPER_SIGNATURE;
 
+    unsigned long previousMillis = 0;
+    unsigned long interval = 1000;
+    String previousMessage;
+
 public:
     HmiConnect(HardwareSerial, int);
     HmiConnect &SetCallback(HMI_CALLBACK_SIGNATURE);
     void loop();
     void sendMessage(String);
     HmiConnect &SetDeveloperMode(HMI_CALLBACK_SIGNATURE);
+    void enable();
+    void disable();
     String escapeJson(String);
 };
 

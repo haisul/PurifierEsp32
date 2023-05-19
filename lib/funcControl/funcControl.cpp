@@ -128,34 +128,7 @@ void funcControl::saveToJson() {
     String initialStr;
     serializeJson(j_initial, initialStr);
     writeFile2(LittleFS, "/initial/initial.txt", initialStr.c_str());
-    // logger.i("saveToJson Complete!");
 }
-
-/*void funcControl::saveToJson() {
-    StaticJsonDocument<384> j_initial;
-
-    j_initial["pur.state"] = pur.state;
-    j_initial["fog.state"] = fog.state;
-    j_initial["uvc.state"] = uvc.state;
-    j_initial["all.state"] = all.state;
-    j_initial["pur.countState"] = pur.countState;
-    j_initial["fog.countState"] = fog.countState;
-    j_initial["uvc.countState"] = uvc.countState;
-    j_initial["all.countState"] = all.countState;
-    j_initial["pur.time"] = pur.time;
-    j_initial["fog.time"] = fog.time;
-    j_initial["uvc.time"] = uvc.time;
-    j_initial["all.time"] = all.time;
-    j_initial["_modeAuto"] = _modeAuto;
-    j_initial["_modeSleep"] = _modeSleep;
-    j_initial["_modeManual"] = _modeManual;
-    j_initial["manualDutycycle"] = manualDutycycle;
-    j_initial["non"] = "non";
-
-    String initialStr;
-    serializeJson(j_initial, initialStr);
-    writeFile2(LittleFS, "/initial/initial.txt", initialStr.c_str());
-}*/
 
 void funcControl::initialJson() {
     String readinitialStr = readFile(LittleFS, "/initial/initial.txt");
@@ -174,36 +147,6 @@ void funcControl::initialJson() {
 
     logger.i("load From Json Complete!");
 }
-
-/*void funcControl::initialJson() {
-
-    String readinitialStr = readFile(LittleFS, "/initial/initial.txt");
-
-    StaticJsonDocument<512> doc;
-    DeserializationError error = deserializeJson(doc, readinitialStr);
-
-    if (error) {
-        logger.e("deserializeJson() failed: %s", error.c_str());
-        return;
-    }
-
-    pur.countState = doc["pur.countState"];
-    fog.countState = doc["fog.countState"];
-    uvc.countState = doc["uvc.countState"];
-    all.countState = doc["all.countState"];
-    pur.time = doc["pur.time"];
-    fog.time = doc["fog.time"];
-    uvc.time = doc["uvc.time"];
-    all.time = doc["all.time"];
-    _modeAuto = doc["_modeAuto"];
-    _modeSleep = doc["_modeSleep"];
-    _modeManual = doc["_modeManual"];
-    manualDutycycle = doc["manualDutycycle"];
-
-    refresh();
-    saveToJson();
-    logger.i("initial LittleFS Complete!");
-}*/
 
 void funcControl::MachineInitial() {
     if (!initLittleFS()) {
@@ -232,6 +175,10 @@ bool funcControl::MachineState() {
 
 bool funcControl::MachineCountStart() {
     return all.countStart() || pur.countStart() || fog.countStart() || uvc.countStart();
+}
+
+bool funcControl::MachineAction() {
+    return all.inAction() || pur.inAction() || fog.inAction() || uvc.inAction();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////

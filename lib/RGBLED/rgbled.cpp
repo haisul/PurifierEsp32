@@ -231,25 +231,25 @@ int *rgbLed::custom(int red, int green, int blue) {
 void rgbLed::incrementN(int speed, int direction) {
     switch (speed) {
     case SLOWEST:
-        delayTime = 1024;
-        break;
-    case SLOWER:
         delayTime = 512;
         break;
-    case SLOW:
+    case SLOWER:
         delayTime = 256;
         break;
-    case MEDIUM:
+    case SLOW:
         delayTime = 128;
         break;
-    case FAST:
+    case MEDIUM:
         delayTime = 64;
         break;
-    case FASTER:
+    case FAST:
         delayTime = 16;
         break;
-    case FASTEST:
+    case FASTER:
         delayTime = 4;
+        break;
+    case FASTEST:
+        delayTime = 2;
         break;
     default:
         break;

@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #include <FastLED.h>
 
+// when use Jtag debugger, the pin number is different
+// #define LED_PIN 23
 #define LED_PIN 13
 // 2. set this to the number of LEDs on the RGB strip
 #define NUM_LEDS 48

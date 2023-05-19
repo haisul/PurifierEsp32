@@ -1,8 +1,8 @@
 #include "HmiConnect.h"
 
 HmiConnect::HmiConnect(HardwareSerial HMI, int monitor_speed) : _HMI(HMI), _monitor_speed(monitor_speed) {
-    _HMI.begin(monitor_speed);
-    _HMI.printf("rest\xff\xff\xff");
+    _HMI.begin(_monitor_speed);
+    //_HMI.printf("rest\xff\xff\xff");
     while (_HMI.read() >= 0) {
     };
 }
@@ -27,9 +27,14 @@ void HmiConnect::loop() {
                 char c = _HMI.read();
                 if (c == '\n') {
                     msgBuffer.trim();
+                    if (millis() - previousMillis < interval && msgBuffer == previousMessage) {
+                    sendMessage("***");
+                        break;
+                    }
+                    previousMessage = msgBuffer;
                     Serial.printf("%s\n", msgBuffer.c_str());
+                    sendMessage("*");
                     hmi_callback(msgBuffer);
-                    sendMessage("Administrator.feedBack.val=1");
                     break;
                 } else
                     msgBuffer += c;
@@ -43,12 +48,27 @@ void HmiConnect::loop() {
             Serial.print(c, HEX);
             Serial.printf(" ");
         }
+        previousMillis = millis();
     }
 }
 
 void HmiConnect::sendMessage(String HMI_msg) {
     logger.w(HMI_msg.c_str());
-    _HMI.printf("%s\xff\xff\xff", HMI_msg.c_str());
+    //_HMI.printf("%s\xff\xff\xff", HMI_msg.c_str());
+    _HMI.printf("%s", HMI_msg.c_str());
+}
+
+void HmiConnect::enable() {
+    _HMI.begin(_monitor_speed);
+    _HMI.printf("rest\xff\xff\xff");
+    while (_HMI.read() >= 0) {
+    };
+}
+
+void HmiConnect::disable() {
+    _HMI.end();
+    while (_HMI.read() >= 0) {
+    };
 }
 
 String formatMessage(String func, String set, String state) {
@@ -70,7 +90,7 @@ String formatMessage(String func, String set, String state) {
     return page + "." + func + "_" + set + ".val=" + val;
 };
 
-String HmiConnect::escapeJson(String jsonString) {
+/*String HmiConnect::escapeJson(String jsonString) {
     String escapedString = "";
 
     for (int i = 0; i < jsonString.length(); i++) {
@@ -109,4 +129,4 @@ String HmiConnect::escapeJson(String jsonString) {
     }
 
     return escapedString;
-}
+}*/

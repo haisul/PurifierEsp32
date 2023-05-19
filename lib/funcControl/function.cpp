@@ -17,7 +17,7 @@ void Function::power(bool status) {
         logger.i("%s startingCount", name.c_str());
     } else if (!state)
         startingCount = false;
-    logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
+    Serial.printf("\n%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
 void Function::count(bool status) {
@@ -41,12 +41,12 @@ void Function::setTime(uint32_t time) {
 bool Function::countStart() { return startingCount; }
 
 JsonVariant Function::getVariable() {
-    StaticJsonDocument<128> j_initial;
+    j_initial.clear();
     j_initial["state"] = state;
     j_initial["countState"] = countState;
     j_initial["time"] = time;
 
-    return j_initial;
+    return j_initial.as<JsonVariant>();
 }
 
 void Function::setVariable(JsonVariant j_initial) {
@@ -56,6 +56,8 @@ void Function::setVariable(JsonVariant j_initial) {
 
 bool Function::getState() { return state; }
 
+int32_t Function::getTime() { return time; }
+
 int32_t Function::getCountTime() {
     if (startingCount) {
         countTime = endTime - rtc.getEpoch();
@@ -64,6 +66,8 @@ int32_t Function::getCountTime() {
     }
     return countTime;
 }
+
+bool Function::inAction() { return isInAction; }
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
@@ -87,13 +91,16 @@ void Purifier::power(bool status) {
             startingCount = true;
         }
         Purifier *params = this;
-        xTaskCreatePinnedToCore(purPowerControl, "purPowerControl", 2048, (void *)params, 1, NULL, 0);
-        logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
+        xTaskCreatePinnedToCore(purPowerControl, "purPowerControl", 2048, (void *)params, 1, &taskHandle, 0);
+        // UBaseType_t stackUsage = uxTaskGetStackHighWaterMark(taskHandle);
+        // size_t stackUsageBytes = stackUsage * sizeof(StackType_t);
+        // Serial.printf("Task stack usage: %u bytes\n", stackUsageBytes);
     }
 }
 
 void Purifier::purPowerControl(void *pvParam) {
     Purifier *instance = static_cast<Purifier *>(pvParam);
+    instance->isInAction = true;
     if (instance->state) {
         vTaskDelay(500);
         digitalWrite(instance->purifier, HIGH);
@@ -101,6 +108,8 @@ void Purifier::purPowerControl(void *pvParam) {
         vTaskDelay(500);
         digitalWrite(instance->purifier, LOW);
     }
+    Serial.printf("\nPUR:%s\n", instance->state ? "ON" : "OFF");
+    instance->isInAction = false;
     xSemaphoreGive(instance->purPowerControlMutex);
     vTaskDelete(NULL);
 }
@@ -109,25 +118,25 @@ void Purifier::setMode(MODE mode) {
     modeState = mode;
     switch (mode) {
     case autoMode:
-        dutycycle = 255 / 4 + (255 * 3 / 4) * dustVal / 500;
-        logger.i("%s MODE:AUTO", name.c_str());
+        dutycycle = 255 / 4 + (255 * 3 / 4) * dustVal / 1000;
+        logger.i("%s MODE:AUTO DUTY:%d", name.c_str(), dutycycle);
         break;
 
     case sleepMode:
-        dutycycle = 40;
-        logger.i("%s MODE:SLEEP", name.c_str());
+        dutycycle = 50;
+        logger.i("%s MODE:SLEEP DUTY:%d", name.c_str(), dutycycle);
         break;
 
     case manualMode:
-        dutycycle = manualDutycycle * 2.55;
-        logger.i("%s MODE:MANUAL", name.c_str());
+        dutycycle = manualDutycycle;
+        logger.i("%s MODE:MANUAL DUTY:%d", name.c_str(), dutycycle);
         break;
     }
 
     if (dutycycle > 225)
         dutycycle = 225;
-    else if (dutycycle < 40)
-        dutycycle = 40;
+    else if (dutycycle < 50)
+        dutycycle = 50;
     ledcWrite(PWMchannel, dutycycle);
 }
 
@@ -139,20 +148,18 @@ void Purifier::setDust(uint16_t val) {
 
 void Purifier::setDuty(uint8_t val) {
     manualDutycycle = val;
-    if (modeState == ManualMode) {
+    if (modeState == ManualMode)
         setMode(ManualMode);
-        logger.i("%s DUTY:%d", name.c_str(), val);
-    }
 }
 
 JsonVariant Purifier::getVariable() {
-    StaticJsonDocument<128> j_initial;
+    j_initial.clear();
     j_initial["state"] = state;
     j_initial["countState"] = countState;
     j_initial["time"] = time;
     j_initial["mode"] = modeState;
 
-    return j_initial;
+    return j_initial.as<JsonVariant>();
 }
 
 void Purifier::setVariable(JsonVariant j_initial) {
@@ -182,12 +189,12 @@ void FogMachine::power(bool status) {
         }
         FogMachine *params = this;
         xTaskCreatePinnedToCore(fogPowerControl, "fogPowerControl", 2048, (void *)params, 1, NULL, 0);
-        logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
     }
 }
 
 void FogMachine::fogPowerControl(void *pvParam) {
     FogMachine *instance = static_cast<FogMachine *>(pvParam);
+    instance->isInAction = true;
     if (instance->state) {
         digitalWrite(instance->fogMachine, HIGH);
         vTaskDelay(500);
@@ -199,6 +206,8 @@ void FogMachine::fogPowerControl(void *pvParam) {
         digitalWrite(instance->fogpump, LOW);
         digitalWrite(instance->fogfan, LOW);
     }
+    Serial.printf("\nFOG:%s\n", instance->state ? "ON" : "OFF");
+    instance->isInAction = false;
     xSemaphoreGive(instance->fogPowerControlMutex);
     vTaskDelete(NULL);
 }
@@ -234,12 +243,12 @@ void UvcLamp::power(bool status) {
         }
         UvcLamp *params = this;
         xTaskCreatePinnedToCore(uvcPowerControl, "uvcPowerControl", 2048, (void *)params, 1, NULL, 0);
-        logger.i("%s:%s", name.c_str(), state ? "ON" : "OFF");
     }
 }
 
 void UvcLamp::uvcPowerControl(void *pvParam) {
     UvcLamp *instance = static_cast<UvcLamp *>(pvParam);
+    instance->isInAction = true;
     if (instance->state) {
         digitalWrite(instance->ecin, LOW);
         digitalWrite(instance->ecout, LOW);
@@ -255,6 +264,8 @@ void UvcLamp::uvcPowerControl(void *pvParam) {
         vTaskDelay(6000);
         digitalWrite(instance->ecin, LOW);
     }
+    Serial.printf("\nUVC:%s\n", instance->state ? "ON" : "OFF");
+    instance->isInAction = false;
     xSemaphoreGive(instance->uvcPowerControlMutex);
     vTaskDelete(NULL);
 }
@@ -278,33 +289,3 @@ void UvcLamp::increment(String set, bool status) {
         digitalWrite(uvLamp, status);
     }
 }
-
-///////////////////////////////////////////////////////////////////////
-
-/*
-class A {
-private:
-    String a;
-
-protected:
-    int i = 0;
-    int j = 0;
-    int k = 0;
-
-public:
-    A();
-    virtual void fun();
-    void fun2();
-};
-
-class B : public A {
-    private:
-    int l=0;
-    int m=0;
-    int n=0;
-    public:
-    B():A(){};
-    void fun()override{};
-    void test();
-
-}*/
