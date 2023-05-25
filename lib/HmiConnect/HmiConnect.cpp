@@ -28,7 +28,7 @@ void HmiConnect::loop() {
                 if (c == '\n') {
                     msgBuffer.trim();
                     if (millis() - previousMillis < interval && msgBuffer == previousMessage) {
-                    sendMessage("***");
+                        sendMessage("***");
                         break;
                     }
                     previousMessage = msgBuffer;

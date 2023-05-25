@@ -37,7 +37,7 @@ void QueueMQTTClient::connectToMqtt(String SSID, String serialNum) {
         logger.i("MQTT is connected!");
     }
     QueueMQTTClient *params = this;
-    xTaskCreatePinnedToCore(taskFunction, "mqttLoop", 8192, (void *)params, 1, NULL, 0);
+    xTaskCreatePinnedToCore(taskFunction, "mqttLoop", 8192, (void *)params, 1, NULL, 1);
 
     if (!loadTopic()) {
         mqttClient.onMessage([this](String &topic, String &payload) {
@@ -112,18 +112,20 @@ bool QueueMQTTClient::pairing(String step, String userId) {
 }
 
 void QueueMQTTClient::sendMessage(const String targetTopic, const String payload, int qos) {
-    if (payload != nullptr || payload != "") {
-        String msg[] = {targetTopic, payload};
-        switch (qos) {
-        case 0:
-            QoS0_Queue.addQueue(msg, 2);
-            break;
-        case 1:
-            QoS1_Queue.addQueue(msg, 2);
-            break;
-        case 2:
-            QoS2_Queue.addQueue(msg, 2);
-            break;
+    if (mqttClient.connected()) {
+        if (payload != nullptr || payload != "") {
+            String msg[] = {targetTopic, payload};
+            switch (qos) {
+            case 0:
+                QoS0_Queue.addQueue(msg, 2);
+                break;
+            case 1:
+                QoS1_Queue.addQueue(msg, 2);
+                break;
+            case 2:
+                QoS2_Queue.addQueue(msg, 2);
+                break;
+            }
         }
     }
 }
@@ -135,6 +137,9 @@ void QueueMQTTClient::taskFunction(void *pvParam) {
 }
 
 void QueueMQTTClient::mqttLoop() {
+    String topic;
+    String message;
+    bool result;
 
     while (1) {
 
@@ -152,24 +157,24 @@ void QueueMQTTClient::mqttLoop() {
         }
 
         if (!QoS0_Queue.isQueueEmpty()) {
-            String topic = QoS0_Queue.getQueue();
-            String message = QoS0_Queue.getQueue();
-            bool result = mqttClient.publish(topic, message, false, 0);
-            logger.w("QoS0:%s", result ? "true" : "false");
+            topic = QoS0_Queue.getQueue();
+            message = QoS0_Queue.getQueue();
+            result = mqttClient.publish(topic, message, false, 0);
+            logger.w("QoS0:%s\nmassage:%s", result ? "true" : "false", message.c_str());
         }
 
         if (millis() - lastMsg > 1000) {
             if (!QoS1_Queue.isQueueEmpty()) {
-                String topic = QoS1_Queue.getQueue();
-                String message = QoS1_Queue.getQueue();
-                bool result = mqttClient.publish(topic, message, false, 1);
-                logger.w("QoS1:%s", result ? "true" : "false");
+                topic = QoS1_Queue.getQueue();
+                message = QoS1_Queue.getQueue();
+                result = mqttClient.publish(topic, message, false, 1);
+                logger.w("QoS1:%s\nmassage:%s", result ? "true" : "false", message.c_str());
             }
             if (!QoS2_Queue.isQueueEmpty()) {
-                String topic = QoS2_Queue.getQueue();
-                String message = QoS2_Queue.getQueue();
-                bool result = mqttClient.publish(topic, message, false, 2);
-                logger.w("QoS2:%s", result ? "true" : "false");
+                topic = QoS2_Queue.getQueue();
+                message = QoS2_Queue.getQueue();
+                result = mqttClient.publish(topic, message, false, 2);
+                logger.w("QoS2:%s\nmassage:%s", result ? "true" : "false", message.c_str());
             }
             lastMsg = millis();
         }

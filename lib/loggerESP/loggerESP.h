@@ -19,8 +19,8 @@ public:
     void error(const char *file, int line, const char *func, const char *format, ...);
 
 private:
-    char *formatBuf(char *(&buf));
-    void printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, char *(&buf));
+    String formatBuf(char *buf);
+    void printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, const String &buf);
 };
 
 extern LoggerESP logger;

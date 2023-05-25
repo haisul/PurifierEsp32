@@ -17,7 +17,7 @@ void Function::power(bool status) {
         logger.i("%s startingCount", name.c_str());
     } else if (!state)
         startingCount = false;
-    Serial.printf("\n%s:%s", name.c_str(), state ? "ON" : "OFF");
+    logger.w("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
 void Function::count(bool status) {
@@ -56,6 +56,8 @@ void Function::setVariable(JsonVariant j_initial) {
 
 bool Function::getState() { return state; }
 
+bool Function::getCountState() { return countState; }
+
 int32_t Function::getTime() { return time; }
 
 int32_t Function::getCountTime() {
@@ -86,6 +88,7 @@ Purifier::Purifier(String name) : Function(name) {
 void Purifier::power(bool status) {
     if (xSemaphoreTake(purPowerControlMutex, (TickType_t)10) == pdTRUE) {
         state = status;
+        setMode(modeState);
         if (state && countState) {
             endTime = rtc.getEpoch() + time;
             startingCount = true;
@@ -108,7 +111,7 @@ void Purifier::purPowerControl(void *pvParam) {
         vTaskDelay(500);
         digitalWrite(instance->purifier, LOW);
     }
-    Serial.printf("\nPUR:%s\n", instance->state ? "ON" : "OFF");
+    logger.w("PUR:%s", instance->state ? "ON" : "OFF");
     instance->isInAction = false;
     xSemaphoreGive(instance->purPowerControlMutex);
     vTaskDelete(NULL);
@@ -168,6 +171,10 @@ void Purifier::setVariable(JsonVariant j_initial) {
     modeState = j_initial["mode"];
 }
 
+void Purifier::maxPur() {
+    ledcWrite(PWMchannel, 225);
+}
+
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 
@@ -202,11 +209,11 @@ void FogMachine::fogPowerControl(void *pvParam) {
         digitalWrite(instance->fogfan, HIGH);
     } else {
         digitalWrite(instance->fogMachine, LOW);
-        vTaskDelay(2000);
         digitalWrite(instance->fogpump, LOW);
+        vTaskDelay(2000);
         digitalWrite(instance->fogfan, LOW);
     }
-    Serial.printf("\nFOG:%s\n", instance->state ? "ON" : "OFF");
+    logger.w("FOG:%s", instance->state ? "ON" : "OFF");
     instance->isInAction = false;
     xSemaphoreGive(instance->fogPowerControlMutex);
     vTaskDelete(NULL);
@@ -264,7 +271,7 @@ void UvcLamp::uvcPowerControl(void *pvParam) {
         vTaskDelay(6000);
         digitalWrite(instance->ecin, LOW);
     }
-    Serial.printf("\nUVC:%s\n", instance->state ? "ON" : "OFF");
+    logger.w("UVC:%s", instance->state ? "ON" : "OFF");
     instance->isInAction = false;
     xSemaphoreGive(instance->uvcPowerControlMutex);
     vTaskDelete(NULL);

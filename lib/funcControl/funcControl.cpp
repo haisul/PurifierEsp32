@@ -56,35 +56,38 @@ void funcControl::systemCommend(String set, String state) {
 }
 
 void funcControl::funcState(String function, bool status) {
-    if (function == "all")
-        all.power(status);
-    if (function == "all" || function == "pur")
+
+    if (function == "all" || function == "pur" && status != pur.getState())
         pur.power(status);
-    if (function == "all" || function == "fog")
+    if (function == "all" || function == "fog" && status != fog.getState())
         fog.power(status);
-    if (function == "all" || function == "uvc")
+    if (function == "all" || function == "uvc" && status != uvc.getState())
         uvc.power(status);
+    if (function == "all" && status != all.getState()) {
+        all.power(status);
+        pur.maxPur();
+    }
 }
 
 void funcControl::countState(String function, bool status) {
-    if (function == "all")
+    if (function == "all" && status != all.getCountState())
         all.count(status);
-    if (function == "pur")
+    if (function == "pur" && status != pur.getCountState())
         pur.count(status);
-    if (function == "fog")
+    if (function == "fog" && status != fog.getCountState())
         fog.count(status);
-    if (function == "uvc")
+    if (function == "uvc" && status != uvc.getCountState())
         uvc.count(status);
 }
 
 void funcControl::timeSet(String function, uint32_t time) {
-    if (function == "all")
+    if (function == "all" && time != all.getTime())
         all.setTime(time);
-    if (function == "pur")
+    if (function == "pur" && time != pur.getTime())
         pur.setTime(time);
-    if (function == "fog")
+    if (function == "fog" && time != fog.getTime())
         fog.setTime(time);
-    if (function == "uvc")
+    if (function == "uvc" && time != uvc.getTime())
         uvc.setTime(time);
 }
 

@@ -41,6 +41,7 @@ public:
     void setTime(uint32_t);
     bool countStart();
     bool getState();
+    bool getCountState();
     int32_t getCountTime();
     int32_t getTime();
     bool inAction();
@@ -74,6 +75,7 @@ public:
     void setMode(MODE);
     void setDust(uint16_t);
     void setDuty(uint8_t);
+    void maxPur();
     void setVariable(JsonVariant) override;
     JsonVariant getVariable() override;
 };

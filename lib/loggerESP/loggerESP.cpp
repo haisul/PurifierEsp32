@@ -5,51 +5,51 @@ LoggerESP::LoggerESP() {
 }
 
 void LoggerESP::info(const char *file, int line, const char *func, const char *format, ...) {
-    char *buf;
     va_list args;
     va_start(args, format);
     int bufSize = vsnprintf(NULL, 0, format, args) + 1;
     va_end(args);
-    buf = new char[bufSize];
+
+    char buf[bufSize];
+
     va_start(args, format);
     vsnprintf(buf, bufSize, format, args);
     va_end(args);
 
-    formatBuf(buf);
-    printLog(INFO, "INFO", file, line, func, buf);
+    printLog(INFO, "INFO", file, line, func, formatBuf(buf));
 }
 
 void LoggerESP::warring(const char *file, int line, const char *func, const char *format, ...) {
-    char *buf;
     va_list args;
     va_start(args, format);
     int bufSize = vsnprintf(NULL, 0, format, args) + 1;
     va_end(args);
-    buf = new char[bufSize];
+
+    char buf[bufSize];
+
     va_start(args, format);
     vsnprintf(buf, bufSize, format, args);
     va_end(args);
 
-    formatBuf(buf);
-    printLog(WARRING, "WARRING", file, line, func, buf);
+    printLog(WARRING, "WARRING", file, line, func, formatBuf(buf));
 }
 
 void LoggerESP::error(const char *file, int line, const char *func, const char *format, ...) {
-    char *buf;
     va_list args;
     va_start(args, format);
     int bufSize = vsnprintf(NULL, 0, format, args) + 1;
     va_end(args);
-    buf = new char[bufSize];
+
+    char buf[bufSize];
+
     va_start(args, format);
     vsnprintf(buf, bufSize, format, args);
     va_end(args);
 
-    formatBuf(buf);
-    printLog(ERROR, "ERROR", file, line, func, buf);
+    printLog(ERROR, "ERROR", file, line, func, formatBuf(buf));
 }
 
-char *LoggerESP::formatBuf(char *(&buf)) {
+String LoggerESP::formatBuf(char *buf) {
     const int MAX_LINE_LENGTH = 100;
     int len = strlen(buf);
     int addSize = len % MAX_LINE_LENGTH;
@@ -63,7 +63,7 @@ char *LoggerESP::formatBuf(char *(&buf)) {
         }
     }
     addSize += 1;
-    char *tmp = new char[len + addSize];
+    char tmp[len + addSize];
     int tmp_len = len + addSize;
     int lineCount = 0; // 紀錄當前行的字元數
 
@@ -87,12 +87,11 @@ char *LoggerESP::formatBuf(char *(&buf)) {
         }
     }
     tmp[tmp_len] = '\0';
-    delete[] buf;
-    buf = tmp;
-    return buf;
+    String tmpStr(tmp);
+    return tmpStr;
 }
 
-void LoggerESP::printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, char *(&buf)) {
+void LoggerESP::printLog(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, const String &buf) {
     String line1 = "=", line2;
     for (int i = 0; i < 109; i++) {
         line1 += "=";

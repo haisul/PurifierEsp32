@@ -32,7 +32,7 @@ public:
     UvcLamp uvc;
 
     funcControl();
-    void commend(String, String set = "", String stete = "");
+    void commend(String, String = "", String = "");
 
     void saveToJson();
     void initialJson();
