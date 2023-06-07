@@ -101,7 +101,7 @@ void funcControl::changePurMode(String mode) {
 }
 
 void funcControl::changePurSpeed(uint8_t speed) {
-    pur.setDuty(speed * 2.55);
+    pur.setDuty(speed);
 }
 
 void funcControl::devMode(String function, String set, bool state) {

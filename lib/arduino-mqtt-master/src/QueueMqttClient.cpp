@@ -28,6 +28,7 @@ bool QueueMQTTClient::loadCertFile() {
 void QueueMQTTClient::connectToMqtt(String SSID, String serialNum) {
     this->paireTopic = SSID;
     this->serialNum = serialNum;
+
     if (loadCertFile()) {
         mqttClient.setOptions(0, true, 2000);
         mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
@@ -66,7 +67,11 @@ bool QueueMQTTClient::loadTopic() {
     topicTimer = doc["topicTimer"].as<String>();
 
     mqttClient.subscribe(topicApp);
+    mqttClient.setWill(topicEsp.c_str(), "#disEsp", false, 2);
     logger.i("%s\n%s\n%s\n%s", topicApp.c_str(), topicEsp.c_str(), topicPms.c_str(), topicTimer.c_str());
+    if (MQTT_onConnect) {
+        MQTT_onConnect(); // 調用回調函數
+    }
     return true;
 }
 
@@ -130,6 +135,10 @@ void QueueMQTTClient::sendMessage(const String targetTopic, const String payload
     }
 }
 
+void QueueMQTTClient::subscribe(String &topic) {
+    mqttClient.subscribe(topic);
+}
+
 void QueueMQTTClient::taskFunction(void *pvParam) {
     QueueMQTTClient *instance = static_cast<QueueMQTTClient *>(pvParam);
     instance->mqttLoop();
@@ -148,6 +157,10 @@ void QueueMQTTClient::mqttLoop() {
             while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
                 vTaskDelay(250);
             }
+            if (MQTT_onConnect) {
+                MQTT_onConnect(); // 調用回調函數
+            }
+            // mqttClient.subscribe(topicApp);
             logger.w("MQTT is ReConnected!");
         }
         if (WiFi.status() != WL_CONNECTED) {
@@ -185,6 +198,11 @@ void QueueMQTTClient::mqttLoop() {
 
 QueueMQTTClient &QueueMQTTClient::mqttCallback(MQTT_CALLBACK_SIGNATURE) {
     this->MQTT_callback = MQTT_callback;
+    return *this;
+};
+
+QueueMQTTClient &QueueMQTTClient::onMqttConnect(MQTT_ONCONNECT_SIGNATURE) {
+    this->MQTT_onConnect = MQTT_onConnect;
     return *this;
 };
 

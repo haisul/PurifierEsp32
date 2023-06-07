@@ -150,7 +150,8 @@ void Purifier::setDust(uint16_t val) {
 }
 
 void Purifier::setDuty(uint8_t val) {
-    manualDutycycle = val;
+    speed = val;
+    manualDutycycle = val * 2.55;
     if (modeState == ManualMode)
         setMode(ManualMode);
 }
@@ -161,7 +162,7 @@ JsonVariant Purifier::getVariable() {
     j_initial["countState"] = countState;
     j_initial["time"] = time;
     j_initial["mode"] = modeState;
-
+    j_initial["speed"] = speed;
     return j_initial.as<JsonVariant>();
 }
 

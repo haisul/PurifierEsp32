@@ -47,6 +47,9 @@ int LedColor = 0;
 bool isMsgProcessRunning = false;
 bool sendTimer = false;
 
+bool power = false;
+bool machineState = false;
+
 // POWER BOTTON
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -107,16 +110,40 @@ void HmiCallback(String HMI_msg) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+void onMqttConnect() {
+    String topicEsp = mqttClient.getTopicEsp();
+    logger.e("onMqttConnect");
+    if (topicEsp != nullptr) {
+        mqttClient.subscribe(topicEsp);
+        function.refresh("");
+        mqttClient.sendMessage(topicEsp, "#onEsp", 2);
+        if(machineState)
+            mqttClient.sendMessage(topicEsp, "#powerOn", 2);
+        else
+            mqttClient.sendMessage(topicEsp, "#powerOff", 2);
+    }
+}
+
 void mqttCallback(String &topic, String &payload) {
     if (payload != nullptr && payload != "") {
         String mqttMsg = payload;
+        logger.w("Topic:%s\nMsg:%s", topic.c_str(), mqttMsg.c_str());
         if (topic == mqttClient.getTopicApp()) {
             if (mqttMsg == "delete") {
                 // mqttClient.disconnect();
                 function.MachineReset();
+                // TODO:
+            } else if (mqttMsg == "onApp") {
+                mqttClient.sendMessage(mqttClient.getTopicEsp(), "#onEsp", 2);
+                if (machineState)
+                    mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOn", 2);
+                else if (!machineState)
+                    mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOff", 2);
+            } else if (mqttMsg == "turnOn" || mqttMsg == "shutDown") {
+                power = true;
+                xSemaphoreGive(machinePwrNotify);
             } else if (!isMsgProcessRunning) {
                 msgProcess("MQTT", mqttMsg);
-                logger.w("Topic:%s\nMsg:%s", topic.c_str(), mqttMsg.c_str());
             }
         }
     }
@@ -277,8 +304,6 @@ void hmiTask(void *pvParam) {
     }
 }
 
-bool power;
-
 void machinePwrTask(void *param) {
     bool enableIntterrupt = false;
     bool buttonState = false;
@@ -292,13 +317,15 @@ void machinePwrTask(void *param) {
             if (millis() - lastInterruptTime > 2000 || power) {
                 buttonState = !buttonState;
                 buttonStartTime = millis();
-                if (buttonState) {
+                if (buttonState && !machineState) {
                     digitalWrite(powerSupply, HIGH);
                     xSemaphoreGive(timerNotify);
                     xSemaphoreGive(dustNotify);
                     xSemaphoreGive(hmiNotify);
                     logger.e("turnOn");
-                } else if (!buttonState) {
+                    machineState = true;
+                    mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOn", 2);
+                } else if (!buttonState && machineState) {
                     function.commend("all", "state", "off");
                     digitalWrite(powerSupply, LOW);
                     xSemaphoreTake(timerNotify, portMAX_DELAY);
@@ -306,6 +333,8 @@ void machinePwrTask(void *param) {
                     LedColor = 0;
                     xSemaphoreTake(hmiNotify, portMAX_DELAY);
                     logger.e("shutDown");
+                    machineState = false;
+                    mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOff", 2);
                 }
                 buttonPressed = false;
                 enableIntterrupt = true;
@@ -355,6 +384,7 @@ void setup() {
     wifi.connect();
     ///////////////////////////////////////
     mqttClient.mqttCallback(mqttCallback);
+    mqttClient.onMqttConnect(onMqttConnect);
     HMI.SetCallback(HmiCallback);
     function.setMCUcommender(MCUcommender);
     // OTAServer();
@@ -403,6 +433,7 @@ void loop() {
                 HMI.sendMessage("c" + function.getInitialJson());
             } else if (msgBuffer == "power") {
                 power = true;
+                xSemaphoreGive(machinePwrNotify);
             }
             msgBuffer = "";
             break;

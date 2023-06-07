@@ -63,6 +63,7 @@ private:
     uint16_t dustVal = 0;
     uint8_t manualDutycycle = 30;
     MODE modeState = autoMode;
+    uint8_t speed = 10;
 
     static SemaphoreHandle_t purPowerControlMutex;
     static void purPowerControl(void *pvParam);

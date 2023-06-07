@@ -41,8 +41,10 @@ void wifiController::WiFiEvent(WiFiEvent_t event) {
 
 void wifiController::smartConfig(void *parameter) {
     int smartConfigTime = millis();
+    WiFi.beginSmartConfig();
     logger.i("SmartConfig start!");
-    while (millis() - smartConfigTime < 120 * 1000) {
+    while (millis() - smartConfigTime < 59 * 1000) {
+
         if (WiFi.isConnected()) {
             logger.i("smartConfig Done!");
             break;
