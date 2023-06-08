@@ -30,7 +30,7 @@ void QueueMQTTClient::connectToMqtt(String SSID, String serialNum) {
     this->serialNum = serialNum;
 
     if (loadCertFile()) {
-        mqttClient.setOptions(0, true, 2000);
+        mqttClient.setOptions(10, false, 2000);
         mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
         while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
             vTaskDelay(250);
@@ -66,7 +66,7 @@ bool QueueMQTTClient::loadTopic() {
     topicPms = doc["topicPms"].as<String>();
     topicTimer = doc["topicTimer"].as<String>();
 
-    mqttClient.subscribe(topicApp);
+    logger.w("subscribe %s : %s", topicApp.c_str(), mqttClient.subscribe(topicApp, 2) ? "true" : "false");
     mqttClient.setWill(topicEsp.c_str(), "#disEsp", false, 2);
     logger.i("%s\n%s\n%s\n%s", topicApp.c_str(), topicEsp.c_str(), topicPms.c_str(), topicTimer.c_str());
     if (MQTT_onConnect) {
@@ -78,22 +78,17 @@ bool QueueMQTTClient::loadTopic() {
 bool QueueMQTTClient::pairing(String step, String userId) {
     if (step == "step1") {
         logger.w("subscribe %s : %s", paireTopic.c_str(), mqttClient.subscribe(paireTopic, 2) ? "true" : "false");
-        /*while (!mqttClient.publish(paireTopic, serialNum, false, 2)) {
-            vTaskDelay(250);
-        }*/
         sendMessage(paireTopic, serialNum, 2);
         deleteTopic = true;
         return true;
     } else if (step == "step2" && userId != "") {
-        // mqttClient.publish(paireTopic, "connected", false, 2);
-
         serialNum.replace("serialNum:", "");
         userId.replace("userID:", "");
         topicApp = userId + "/" + serialNum + "/app";
         topicEsp = userId + "/" + serialNum + "/esp";
         topicPms = userId + "/" + serialNum + "/pms";
         topicTimer = userId + "/" + serialNum + "/timer";
-        logger.w("subscribe %s : %s", topicApp.c_str(), mqttClient.subscribe(topicApp) ? "true" : "false");
+        logger.w("subscribe %s : %s", topicApp.c_str(), mqttClient.subscribe(topicApp, 2) ? "true" : "false");
 
         StaticJsonDocument<384> j_topic;
         j_topic["topicApp"] = userId + "/" + serialNum + "/app";
@@ -104,12 +99,12 @@ bool QueueMQTTClient::pairing(String step, String userId) {
         String topicStr;
         serializeJson(j_topic, topicStr);
         writeFile2(LittleFS, "/initial/topic.txt", topicStr.c_str());
-        // function.refresh("MQTT");
         sendMessage(paireTopic, "connected", 2);
         while (!deleteTopic) {
             vTaskDelay(250);
         }
         logger.w("unsubscribe %s : %s", paireTopic.c_str(), mqttClient.unsubscribe(paireTopic) ? "true" : "false");
+        mqttClient.setWill(topicEsp.c_str(), "#disEsp", false, 2);
         mqttClient.onMessage(MQTT_callback);
         return true;
     } else
@@ -135,8 +130,8 @@ void QueueMQTTClient::sendMessage(const String targetTopic, const String payload
     }
 }
 
-void QueueMQTTClient::subscribe(String &topic) {
-    mqttClient.subscribe(topic);
+void QueueMQTTClient::subscribe(String &topic, int qos) {
+    mqttClient.subscribe(topic, qos);
 }
 
 void QueueMQTTClient::taskFunction(void *pvParam) {
@@ -160,8 +155,9 @@ void QueueMQTTClient::mqttLoop() {
             if (MQTT_onConnect) {
                 MQTT_onConnect(); // 調用回調函數
             }
-            // mqttClient.subscribe(topicApp);
             logger.w("MQTT is ReConnected!");
+            uint16_t lastPacketID = mqttClient.lastPacketID();
+            mqttClient.prepareDuplicate(lastPacketID);
         }
         if (WiFi.status() != WL_CONNECTED) {
             Serial.printf("mqttClient.disconnect");
@@ -173,7 +169,11 @@ void QueueMQTTClient::mqttLoop() {
             topic = QoS0_Queue.getQueue();
             message = QoS0_Queue.getQueue();
             result = mqttClient.publish(topic, message, false, 0);
-            logger.w("QoS0:%s\nmassage:%s", result ? "true" : "false", message.c_str());
+            if (result) {
+                logger.i("QoS0\nMsg:%s\nSend Msg Successes!", message.c_str());
+            } else {
+                logger.e("QoS0\nMsg:%s\nSend Msg Faild!", message.c_str());
+            }
         }
 
         if (millis() - lastMsg > 1000) {
@@ -181,13 +181,21 @@ void QueueMQTTClient::mqttLoop() {
                 topic = QoS1_Queue.getQueue();
                 message = QoS1_Queue.getQueue();
                 result = mqttClient.publish(topic, message, false, 1);
-                logger.w("QoS1:%s\nmassage:%s", result ? "true" : "false", message.c_str());
+                if (result) {
+                    logger.i("QoS1\nMsg:%s\nSend Msg Successes!", message.c_str());
+                } else {
+                    logger.e("QoS1\nMsg:%s\nSend Msg Faild!", message.c_str());
+                }
             }
             if (!QoS2_Queue.isQueueEmpty()) {
                 topic = QoS2_Queue.getQueue();
                 message = QoS2_Queue.getQueue();
                 result = mqttClient.publish(topic, message, false, 2);
-                logger.w("QoS2:%s\nmassage:%s", result ? "true" : "false", message.c_str());
+                if (result) {
+                    logger.i("QoS2\nMsg:%s\nSend Msg Successes!", message.c_str());
+                } else {
+                    logger.e("QoS2\nMsg:%s\nSend Msg Faild!", message.c_str());
+                }
             }
             lastMsg = millis();
         }

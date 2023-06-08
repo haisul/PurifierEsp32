@@ -54,7 +54,7 @@ public:
     QueueMQTTClient &mqttCallback(MQTT_CALLBACK_SIGNATURE);
     QueueMQTTClient &onMqttConnect(MQTT_ONCONNECT_SIGNATURE);
     void paireMassage(String &topic, String &payload);
-    void subscribe(String &topic);
+    void subscribe(String &topic, int qos);
 
     String getTopicEsp();
     String getTopicApp();

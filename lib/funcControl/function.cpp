@@ -15,7 +15,7 @@ void Function::power(bool status) {
         endTime = rtc.getEpoch() + time;
         startingCount = true;
         logger.i("%s startingCount", name.c_str());
-    } else if (!state)
+    } else
         startingCount = false;
     logger.w("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
@@ -26,7 +26,7 @@ void Function::count(bool status) {
         endTime = rtc.getEpoch() + time;
         startingCount = true;
         logger.i("%s startingCount", name.c_str());
-    } else if (!countState)
+    } else
         startingCount = false;
     logger.i("%s COUNT:%s", name.c_str(), countState ? "ON" : "OFF");
 }
@@ -92,7 +92,8 @@ void Purifier::power(bool status) {
         if (state && countState) {
             endTime = rtc.getEpoch() + time;
             startingCount = true;
-        }
+        } else
+            startingCount = false;
         Purifier *params = this;
         xTaskCreatePinnedToCore(purPowerControl, "purPowerControl", 2048, (void *)params, 1, &taskHandle, 0);
         // UBaseType_t stackUsage = uxTaskGetStackHighWaterMark(taskHandle);
@@ -194,7 +195,8 @@ void FogMachine::power(bool status) {
         if (state && countState) {
             endTime = rtc.getEpoch() + time;
             startingCount = true;
-        }
+        } else
+            startingCount = false;
         FogMachine *params = this;
         xTaskCreatePinnedToCore(fogPowerControl, "fogPowerControl", 2048, (void *)params, 1, NULL, 0);
     }
@@ -248,7 +250,8 @@ void UvcLamp::power(bool status) {
         if (state && countState) {
             endTime = rtc.getEpoch() + time;
             startingCount = true;
-        }
+        } else
+            startingCount = false;
         UvcLamp *params = this;
         xTaskCreatePinnedToCore(uvcPowerControl, "uvcPowerControl", 2048, (void *)params, 1, NULL, 0);
     }

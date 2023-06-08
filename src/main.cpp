@@ -111,30 +111,29 @@ void HmiCallback(String HMI_msg) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 void onMqttConnect() {
-    String topicEsp = mqttClient.getTopicEsp();
+    String topicApp = mqttClient.getTopicApp();
     logger.e("onMqttConnect");
-    if (topicEsp != nullptr) {
-        mqttClient.subscribe(topicEsp);
-        function.refresh("");
-        mqttClient.sendMessage(topicEsp, "#onEsp", 2);
-        if(machineState)
-            mqttClient.sendMessage(topicEsp, "#powerOn", 2);
+    if (topicApp != nullptr) {
+        mqttClient.subscribe(topicApp, 2);
+        function.refresh();
+        mqttClient.sendMessage(topicApp, "#onEsp", 2);
+        if (machineState)
+            mqttClient.sendMessage(topicApp, "#powerOn", 2);
         else
-            mqttClient.sendMessage(topicEsp, "#powerOff", 2);
+            mqttClient.sendMessage(topicApp, "#powerOff", 2);
     }
 }
 
 void mqttCallback(String &topic, String &payload) {
-    if (payload != nullptr && payload != "") {
+    if (payload != nullptr && payload != "" && topic != mqttClient.getTopicEsp()) {
         String mqttMsg = payload;
-        logger.w("Topic:%s\nMsg:%s", topic.c_str(), mqttMsg.c_str());
+        Serial.printf("Topic:%s     Msg:%s\n", topic.c_str(), mqttMsg.c_str());
         if (topic == mqttClient.getTopicApp()) {
             if (mqttMsg == "delete") {
-                // mqttClient.disconnect();
                 function.MachineReset();
-                // TODO:
             } else if (mqttMsg == "onApp") {
                 mqttClient.sendMessage(mqttClient.getTopicEsp(), "#onEsp", 2);
+                function.refresh("MQTT");
                 if (machineState)
                     mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOn", 2);
                 else if (!machineState)
@@ -162,7 +161,7 @@ void MCUcommender(String target) {
     }
 
     if (target == "MQTT" || target == "")
-        mqttClient.sendMessage(mqttClient.getTopicEsp(), function.getInitialJson(), 0);
+        mqttClient.sendMessage(mqttClient.getTopicEsp(), function.getInitialJson(), 2);
 }
 
 // TASK Setting
@@ -186,28 +185,40 @@ void timerTask(void *pvParam) {
             if (allTimeBuf <= 0) {
                 function.commend("all", "state", "off");
                 allTimeBuf = function.all.getTime();
+                function.refresh();
             }
+        } else {
+            allTimeBuf = function.all.getTime();
         }
         if (function.pur.countStart() && !function.all.getState()) {
             purTimeBuf = function.pur.getCountTime();
             if (purTimeBuf <= 0) {
                 function.commend("pur", "state", "off");
                 purTimeBuf = function.pur.getTime();
+                function.refresh();
             }
+        } else {
+            purTimeBuf = function.pur.getTime();
         }
         if (function.fog.countStart() && !function.all.getState()) {
             fogTimeBuf = function.fog.getCountTime();
             if (fogTimeBuf <= 0) {
                 function.commend("fog", "state", "off");
                 fogTimeBuf = function.fog.getTime();
+                function.refresh();
             }
+        } else {
+            fogTimeBuf = function.fog.getTime();
         }
         if (function.uvc.countStart() && !function.all.getState()) {
             uvcTimeBuf = function.uvc.getCountTime();
             if (uvcTimeBuf <= 0) {
                 function.commend("uvc", "state", "off");
                 uvcTimeBuf = function.uvc.getTime();
+                function.refresh();
             }
+        } else {
+            uvcTimeBuf = function.uvc.getTime();
         }
 
         if (function.MachineCountStart() && (millis() - curTime >= 30000) || sendTimer) {
@@ -338,7 +349,6 @@ void machinePwrTask(void *param) {
                 }
                 buttonPressed = false;
                 enableIntterrupt = true;
-                // TODO:
                 power = false;
             }
         } else if (buttonPressed && digitalRead(buttonPin) == LOW) {
