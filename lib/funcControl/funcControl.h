@@ -35,7 +35,6 @@ public:
     void commend(String, String = "", String = "");
 
     void saveToJson();
-    void initialJson();
     void refresh(String target = "");
     void MachineInitial();
     void MachineReset();

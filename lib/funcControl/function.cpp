@@ -14,10 +14,10 @@ void Function::power(bool status) {
     if (state && countState) {
         endTime = rtc.getEpoch() + time;
         startingCount = true;
-        logger.i("%s startingCount", name.c_str());
+        logger.iL("%s startingCount", name.c_str());
     } else
         startingCount = false;
-    logger.w("%s:%s", name.c_str(), state ? "ON" : "OFF");
+    logger.iL("%s:%s", name.c_str(), state ? "ON" : "OFF");
 }
 
 void Function::count(bool status) {
@@ -25,17 +25,17 @@ void Function::count(bool status) {
     if (state && countState) {
         endTime = rtc.getEpoch() + time;
         startingCount = true;
-        logger.i("%s startingCount", name.c_str());
+        logger.iL("%s startingCount", name.c_str());
     } else
         startingCount = false;
-    logger.i("%s COUNT:%s", name.c_str(), countState ? "ON" : "OFF");
+    logger.iL("%s COUNT:%s", name.c_str(), countState ? "ON" : "OFF");
 }
 
 void Function::setTime(uint32_t time) {
     this->time = time;
     this->countTime = time;
     endTime = rtc.getEpoch() + time;
-    logger.i("%s TIME:%d", name.c_str(), time);
+    logger.iL("%s TIME:%d", name.c_str(), time);
 }
 
 bool Function::countStart() { return startingCount; }
@@ -112,7 +112,7 @@ void Purifier::purPowerControl(void *pvParam) {
         vTaskDelay(500);
         digitalWrite(instance->purifier, LOW);
     }
-    logger.w("PUR:%s", instance->state ? "ON" : "OFF");
+    logger.iL("PUR:%s", instance->state ? "ON" : "OFF");
     instance->isInAction = false;
     xSemaphoreGive(instance->purPowerControlMutex);
     vTaskDelete(NULL);
@@ -123,17 +123,17 @@ void Purifier::setMode(MODE mode) {
     switch (mode) {
     case autoMode:
         dutycycle = 255 / 4 + (255 * 3 / 4) * dustVal / 1000;
-        logger.i("%s MODE:AUTO DUTY:%d", name.c_str(), dutycycle);
+        logger.iL("%s MODE:AUTO DUTY:%d", name.c_str(), dutycycle);
         break;
 
     case sleepMode:
         dutycycle = 50;
-        logger.i("%s MODE:SLEEP DUTY:%d", name.c_str(), dutycycle);
+        logger.iL("%s MODE:SLEEP DUTY:%d", name.c_str(), dutycycle);
         break;
 
     case manualMode:
         dutycycle = manualDutycycle;
-        logger.i("%s MODE:MANUAL DUTY:%d", name.c_str(), dutycycle);
+        logger.iL("%s MODE:MANUAL DUTY:%d", name.c_str(), dutycycle);
         break;
     }
 
@@ -216,7 +216,7 @@ void FogMachine::fogPowerControl(void *pvParam) {
         vTaskDelay(2000);
         digitalWrite(instance->fogfan, LOW);
     }
-    logger.w("FOG:%s", instance->state ? "ON" : "OFF");
+    logger.iL("FOG:%s", instance->state ? "ON" : "OFF");
     instance->isInAction = false;
     xSemaphoreGive(instance->fogPowerControlMutex);
     vTaskDelete(NULL);
@@ -275,7 +275,7 @@ void UvcLamp::uvcPowerControl(void *pvParam) {
         vTaskDelay(6000);
         digitalWrite(instance->ecin, LOW);
     }
-    logger.w("UVC:%s", instance->state ? "ON" : "OFF");
+    logger.iL("UVC:%s", instance->state ? "ON" : "OFF");
     instance->isInAction = false;
     xSemaphoreGive(instance->uvcPowerControlMutex);
     vTaskDelete(NULL);

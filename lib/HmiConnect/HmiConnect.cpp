@@ -1,8 +1,8 @@
 #include "HmiConnect.h"
 
 HmiConnect::HmiConnect(HardwareSerial HMI, int monitor_speed) : _HMI(HMI), _monitor_speed(monitor_speed) {
+
     _HMI.begin(_monitor_speed);
-    //_HMI.printf("rest\xff\xff\xff");
     while (_HMI.read() >= 0) {
     };
 }
@@ -32,7 +32,7 @@ void HmiConnect::loop() {
                         break;
                     }
                     previousMessage = msgBuffer;
-                    Serial.printf("%s\n", msgBuffer.c_str());
+                    logger.wL("\n[HMI][Recieve]\n%s\n", msgBuffer.c_str());
                     sendMessage("*");
                     hmi_callback(msgBuffer);
                     break;
@@ -40,7 +40,7 @@ void HmiConnect::loop() {
                     msgBuffer += c;
             }
         } else if (c == 0x87) {
-            Serial.println("weakup");
+            logger.wL("weakup");
             hmi_callback("refresh");
             while (_HMI.available() > 0)
                 _HMI.read();
@@ -53,7 +53,7 @@ void HmiConnect::loop() {
 }
 
 void HmiConnect::sendMessage(String HMI_msg) {
-    logger.w(HMI_msg.c_str());
+    logger.wL("\n[HMI][Send]\n%s\n", HMI_msg.c_str());
     //_HMI.printf("%s\xff\xff\xff", HMI_msg.c_str());
     _HMI.printf("%s", HMI_msg.c_str());
 }
@@ -63,12 +63,14 @@ void HmiConnect::enable() {
     _HMI.printf("rest\xff\xff\xff");
     while (_HMI.read() >= 0) {
     };
+    logger.iL("HMI beign");
 }
 
 void HmiConnect::disable() {
     _HMI.end();
     while (_HMI.read() >= 0) {
     };
+    logger.iL("HMI finished");
 }
 
 String formatMessage(String func, String set, String state) {
@@ -89,44 +91,3 @@ String formatMessage(String func, String set, String state) {
 
     return page + "." + func + "_" + set + ".val=" + val;
 };
-
-/*String HmiConnect::escapeJson(String jsonString) {
-    String escapedString = "";
-
-    for (int i = 0; i < jsonString.length(); i++) {
-        char c = jsonString.charAt(i);
-
-        switch (c) {
-        case '\"':
-            escapedString += "\\\"";
-            break;
-        case '\\':
-            escapedString += "\\\\";
-            break;
-        case '\b':
-            escapedString += "\\b";
-            break;
-        case '\f':
-            escapedString += "\\f";
-            break;
-        case '\n':
-            escapedString += "\\n";
-            break;
-        case '\r':
-            escapedString += "\\r";
-            break;
-        case '\t':
-            escapedString += "\\t";
-            break;
-        default:
-            if (c < 32 || c > 126) {
-                escapedString += String("\\u") + String(c, HEX);
-            } else {
-                escapedString += c;
-            }
-            break;
-        }
-    }
-
-    return escapedString;
-}*/

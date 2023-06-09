@@ -10,6 +10,7 @@
 
 #define MQTT_CALLBACK_SIGNATURE std::function<void(String & topic, String & payload)> MQTT_callback
 #define MQTT_ONCONNECT_SIGNATURE std::function<void()> MQTT_onConnect
+#define MQTT_PAIRINGFAILD_SIGNATURE std::function<void()> MQTT_pairingFaild
 
 class QueueMQTTClient {
 private:
@@ -31,35 +32,44 @@ private:
 
     MQTT_CALLBACK_SIGNATURE;
     MQTT_ONCONNECT_SIGNATURE;
+    MQTT_PAIRINGFAILD_SIGNATURE;
 
     bool deleteTopic = false;
     bool isPairing = false;
+
     uint32_t lastMsg = millis();
 
     String serialNum;
     String paireTopic;
     String topicApp;
-    String topicEsp, topicPms, topicTimer;
+    String topicEsp, topicPms, topicTimer, topicWifi;
 
     bool loadCertFile();
     bool loadTopic();
     static void taskFunction(void *pvParam);
     void mqttLoop();
+    static void taskFunction2(void *pvParam);
+    void pairingTimer();
 
 public:
+    bool pairingSuccess = true;
+
     QueueMQTTClient();
     void connectToMqtt(String SSID, String serialNum);
     bool pairing(String step, String userId);
     void sendMessage(const String targetTopic, const String payload, int qos);
     QueueMQTTClient &mqttCallback(MQTT_CALLBACK_SIGNATURE);
     QueueMQTTClient &onMqttConnect(MQTT_ONCONNECT_SIGNATURE);
+    QueueMQTTClient &mqttPairingFaild(MQTT_PAIRINGFAILD_SIGNATURE);
     void paireMassage(String &topic, String &payload);
     void subscribe(String &topic, int qos);
+    void unSubscribe(String &topic);
 
     String getTopicEsp();
     String getTopicApp();
     String getTopicPms();
     String getTopicTimer();
+    String getTopicWifi();
 };
 
 #endif

@@ -1,8 +1,6 @@
 #include "loggerESP.h"
 LoggerESP logger;
-LoggerESP::LoggerESP() {
-    Serial.begin(115200);
-}
+LoggerESP::LoggerESP(){};
 
 void LoggerESP::info(const char *file, int line, const char *func, const char *format, ...) {
     va_list args;
@@ -113,4 +111,55 @@ void LoggerESP::printLog(const String &stytle, const String &level, const String
                        line1 + "\033[0m\n";
 
     Serial.println(loggerMsg);
+}
+
+void LoggerESP::info_lite(const char *file, int line, const char *func, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int bufSize = vsnprintf(NULL, 0, format, args) + 1;
+    va_end(args);
+
+    char buf[bufSize];
+
+    va_start(args, format);
+    vsnprintf(buf, bufSize, format, args);
+    va_end(args);
+
+    printLogLite(NORMAL, "I", file, line, func, buf);
+}
+
+void LoggerESP::warring_lite(const char *file, int line, const char *func, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int bufSize = vsnprintf(NULL, 0, format, args) + 1;
+    va_end(args);
+
+    char buf[bufSize];
+
+    va_start(args, format);
+    vsnprintf(buf, bufSize, format, args);
+    va_end(args);
+
+    printLogLite(WARRING, "W", file, line, func, buf);
+}
+
+void LoggerESP::error_lite(const char *file, int line, const char *func, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int bufSize = vsnprintf(NULL, 0, format, args) + 1;
+    va_end(args);
+
+    char buf[bufSize];
+
+    va_start(args, format);
+    vsnprintf(buf, bufSize, format, args);
+    va_end(args);
+
+    printLogLite(ERROR, "E", file, line, func, buf);
+}
+
+void LoggerESP::printLogLite(const String &stytle, const String &level, const String &file, const uint16_t &line, const String &func, const String &buf) {
+    uint16_t curTime = millis();
+    String loggerMsg = stytle + "[" + level + "]" + "[" + file + ":" + line + "]" + "[Function:" + func + "] " + buf + "\033[0m\n";
+    Serial.print(loggerMsg);
 }

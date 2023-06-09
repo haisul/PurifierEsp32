@@ -67,7 +67,6 @@ void buttonInterruptHandler() {
 
 void msgProcess(String From, String msg) {
     isMsgProcessRunning = true;
-    Serial.printf("\n");
     uint8_t index1 = msg.indexOf('_');
     uint8_t index2 = msg.indexOf(':');
     String func = msg.substring(0, index1), set = "", state = "";
@@ -79,9 +78,10 @@ void msgProcess(String From, String msg) {
         set = msg.substring(index1 + 1);
     }
 
-    logger.i("From:%s\nfunc:%s\nset:%s\nstate:%s\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
+    logger.iL("\n[From:%s][func:%s][set:%s][state:%s]\n", From.c_str(), func.c_str(), set.c_str(), state.c_str());
 
     function.commend(func, set, state);
+
     if (From != "HMIDev") {
         if (From == "HMI")
             function.refresh("MQTT");
@@ -112,22 +112,23 @@ void HmiCallback(String HMI_msg) {
 
 void onMqttConnect() {
     String topicApp = mqttClient.getTopicApp();
-    logger.e("onMqttConnect");
+    String topicEsp = mqttClient.getTopicEsp();
+    logger.iL("Mqtt Connectde & set connect logic");
     if (topicApp != nullptr) {
         mqttClient.subscribe(topicApp, 2);
         function.refresh();
-        mqttClient.sendMessage(topicApp, "#onEsp", 2);
+        mqttClient.sendMessage(topicEsp, "#onEsp", 2);
         if (machineState)
-            mqttClient.sendMessage(topicApp, "#powerOn", 2);
+            mqttClient.sendMessage(topicEsp, "#powerOn", 2);
         else
-            mqttClient.sendMessage(topicApp, "#powerOff", 2);
+            mqttClient.sendMessage(topicEsp, "#powerOff", 2);
     }
 }
 
 void mqttCallback(String &topic, String &payload) {
     if (payload != nullptr && payload != "" && topic != mqttClient.getTopicEsp()) {
         String mqttMsg = payload;
-        Serial.printf("Topic:%s     Msg:%s\n", topic.c_str(), mqttMsg.c_str());
+        logger.wL("\n[MQTT][Recieve][Topic:%s]\n%s\n", topic.c_str(), mqttMsg.c_str());
         if (topic == mqttClient.getTopicApp()) {
             if (mqttMsg == "delete") {
                 function.MachineReset();
@@ -144,8 +145,24 @@ void mqttCallback(String &topic, String &payload) {
             } else if (!isMsgProcessRunning) {
                 msgProcess("MQTT", mqttMsg);
             }
+        } else if (topic == mqttClient.getTopicWifi()) {
+            if (mqttMsg.startsWith("A")) {
+                mqttMsg.remove(0, 1);
+                wifi.convertWifi(mqttMsg);
+
+            } else if (mqttMsg.startsWith("D")) {
+                mqttMsg.remove(0, 1);
+                wifi.removeWifi(mqttMsg);
+            }
         }
     }
+}
+
+void pairingFaild() {
+    logger.eL("Pairing Faild");
+    LedColor = 0;
+    // delay(1000);
+    function.MachineReset();
 }
 
 // local Setting
@@ -153,11 +170,12 @@ void mqttCallback(String &topic, String &payload) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 void MCUcommender(String target) {
-    Serial.printf("target: %s", target);
+    logger.iL("Send refresh to: %s", target);
+    sendTimer = true;
+
     if (target == "HMI" || target == "") {
         HMI.sendMessage("c" + function.getInitialJson());
         HMI.sendMessage("w" + wifi.getInfo());
-        sendTimer = true;
     }
 
     if (target == "MQTT" || target == "")
@@ -231,7 +249,11 @@ void timerTask(void *pvParam) {
             serializeJson(j_timer, timerBuf, sizeof(timerBuf));
             timerStr = timerBuf;
 
-            mqttClient.sendMessage(mqttClient.getTopicTimer(), timerStr, 0);
+            int qos = 0;
+            if (sendTimer) {
+                qos = 2;
+            }
+            mqttClient.sendMessage(mqttClient.getTopicTimer(), timerStr, qos);
             HMI.sendMessage("t" + timerStr);
 
             curTime = millis();
@@ -322,6 +344,7 @@ void machinePwrTask(void *param) {
 
     vTaskDelay(500);
     function.commend("all", "state", "off");
+
     while (1) {
         xSemaphoreTake(machinePwrNotify, portMAX_DELAY);
         if (buttonPressed && digitalRead(buttonPin) == HIGH || power) {
@@ -333,7 +356,7 @@ void machinePwrTask(void *param) {
                     xSemaphoreGive(timerNotify);
                     xSemaphoreGive(dustNotify);
                     xSemaphoreGive(hmiNotify);
-                    logger.e("turnOn");
+                    logger.iL("Machine TurnOn");
                     machineState = true;
                     mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOn", 2);
                 } else if (!buttonState && machineState) {
@@ -343,7 +366,7 @@ void machinePwrTask(void *param) {
                     xSemaphoreTake(dustNotify, portMAX_DELAY);
                     LedColor = 0;
                     xSemaphoreTake(hmiNotify, portMAX_DELAY);
-                    logger.e("shutDown");
+                    logger.iL("Machine ShutDown");
                     machineState = false;
                     mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOff", 2);
                 }
@@ -372,7 +395,7 @@ void machinePwrTask(void *param) {
 
 void onWifiConnected() {
     mqttClient.connectToMqtt(WiFi.SSID(), serialNum);
-    HMI.sendMessage("w" + wifi.getInfo());
+    // HMI.sendMessage("w" + wifi.getInfo());
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -380,7 +403,7 @@ void onWifiConnected() {
 
 void setup() {
     Serial.begin(115200);
-
+    logger.iL("ESP32 setup begin");
     pinMode(LEDpin, OUTPUT);
     pmsSerial.begin(9600, SERIAL_8E1, 5, 18);
     pms.init();
@@ -390,11 +413,13 @@ void setup() {
     pinMode(buttonPin, INPUT_PULLDOWN);
     attachInterrupt(digitalPinToInterrupt(buttonPin), buttonInterruptHandler, RISING);
     ///////////////////////////////////////
+    wifi.init();
     wifi.setWiFiConnectedCallback(onWifiConnected);
     wifi.connect();
     ///////////////////////////////////////
     mqttClient.mqttCallback(mqttCallback);
     mqttClient.onMqttConnect(onMqttConnect);
+    mqttClient.mqttPairingFaild(pairingFaild);
     HMI.SetCallback(HmiCallback);
     function.setMCUcommender(MCUcommender);
     // OTAServer();
@@ -411,6 +436,8 @@ void setup() {
     xTaskCreatePinnedToCore(dustTask, "dustTask", 4096, NULL, 0, &dustHandle, 0);                   // 2384 bytes
     xTaskCreatePinnedToCore(hmiTask, "hmiTask", 8192, NULL, 1, &hmiHandle, 1);                      // 5352 bytes
     xTaskCreatePinnedToCore(machinePwrTask, "machinePwrTask", 4096, NULL, 2, &machinePwrHandle, 1); // 5352 bytes
+
+    logger.iL("ESP32 setup finished");
 }
 
 String msgBuffer = "";

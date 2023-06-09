@@ -15,19 +15,29 @@ private:
     String ip;
     String rssi;
 
+    uint8_t wifiIndex = 0;
+
     static SemaphoreHandle_t reconnectMutex;
+
+    StaticJsonDocument<96> j_wifi;
+    StaticJsonDocument<960> j_wifiList;
 
     ONWIFICONNECTED_SIGNATURE;
     static wifiController *instance;
     static void WiFiEvent(WiFiEvent_t);
-    void saveToJson(String, String, String, String);
-    bool loadFromJson();
+    void saveInfo(String, String, String, String);
+    bool loadWifiData();
 
     static void smartConfig(void *);
     static void wifiReconnect(void *);
+    void getSSID(int);
 
 public:
     wifiController();
+    void init();
+    void addWifi(String SSID, String PASS);
+    void removeWifi(String SSID);
+    void convertWifi(String);
     void connect();
     String getInfo();
     wifiController &setWiFiConnectedCallback(ONWIFICONNECTED_SIGNATURE);

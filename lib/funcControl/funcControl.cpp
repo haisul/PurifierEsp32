@@ -47,12 +47,6 @@ void funcControl::systemCommend(String set, String state) {
     }
     if (set == "wifiConfig")
         MCUcommender(set);
-    /*if (set == "wifiInfo") {
-        int index = state.indexOf('/');
-        SSID = state.substring(0, index);
-        PASSWORD = state.substring(index + 1);
-        MCUcommender(set);
-    }*/
 }
 
 void funcControl::funcState(String function, bool status) {
@@ -131,15 +125,21 @@ void funcControl::saveToJson() {
     String initialStr;
     serializeJson(j_initial, initialStr);
     writeFile2(LittleFS, "/initial/initial.txt", initialStr.c_str());
+    logger.iL("Save function data Success");
 }
 
-void funcControl::initialJson() {
+void funcControl::MachineInitial() {
+    if (!initLittleFS()) {
+        logger.eL("initial function data Failed!");
+        return;
+    }
+
     String readinitialStr = readFile(LittleFS, "/initial/initial.txt");
     StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, readinitialStr);
 
     if (error) {
-        logger.e("deserialize Function Json() failed: %s", error.c_str());
+        logger.eL("deserialize Function data failed: %s", error.c_str());
         return;
     }
 
@@ -148,16 +148,7 @@ void funcControl::initialJson() {
     fog.setVariable(doc["fog"]);
     uvc.setVariable(doc["uvc"]);
 
-    logger.i("load From Json Complete!");
-}
-
-void funcControl::MachineInitial() {
-    if (!initLittleFS()) {
-        logger.e("initial LittleFS Failed!");
-        return;
-    } else {
-        initialJson();
-    }
+    logger.iL("Load function data Complete!");
 }
 
 String funcControl::getInitialJson() {
