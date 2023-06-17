@@ -158,7 +158,7 @@ String funcControl::getInitialJson() {
 
 void funcControl::MachineReset() {
     deleteFile(LittleFS, "/initial/initial.txt");
-    deleteFile(LittleFS, "/initial/topic.txt");
+    deleteFile(LittleFS, "/topic/topic.txt");
     deleteFile(LittleFS, "/wifi/wifi.txt");
     ESP.restart();
 }

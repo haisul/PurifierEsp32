@@ -13,15 +13,11 @@
 #define LEDpin 2
 
 wifiController wifi;
-QueueMQTTClient mqttClient;
+QueueMQTTClient *mqttClient;
 rgbLed Led;
 /////////////////////////////////////////////
 String chipid = String(ESP.getEfuseMac());
 const String serialNum = "serialNum:$iep" + chipid;
-/////////////////////////////////////////////
-// #include <AsyncElegantOTA.h>
-// #include <ESPAsyncWebServer.h>
-// AsyncWebServer server(80);
 //////////////////////////////////////////////
 HardwareSerial pmsSerial(1);
 SerialPM pms(PMS5003, 5, 18);
@@ -59,6 +55,13 @@ void buttonInterruptHandler() {
     lastInterruptTime = millis();
     buttonPressed = true;
     xSemaphoreGive(machinePwrNotify);
+}
+
+void reset() {
+    digitalWrite(powerSupply, LOW);
+    LedColor = 0;
+    vTaskDelay(500);
+    function.MachineReset();
 }
 
 // MESSAGE PROCESS
@@ -111,58 +114,48 @@ void HmiCallback(String HMI_msg) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 void onMqttConnect() {
-    String topicApp = mqttClient.getTopicApp();
-    String topicEsp = mqttClient.getTopicEsp();
-    logger.iL("Mqtt Connectde & set connect logic");
-    if (topicApp != nullptr) {
-        mqttClient.subscribe(topicApp, 2);
-        function.refresh();
-        mqttClient.sendMessage(topicEsp, "#onEsp", 2);
-        if (machineState)
-            mqttClient.sendMessage(topicEsp, "#powerOn", 2);
-        else
-            mqttClient.sendMessage(topicEsp, "#powerOff", 2);
-    }
+    mqttClient->loadTopic();
+    logger.iL("Mqtt initial finished");
+
+    mqttClient->Esp("#onEsp");
+    if (machineState)
+        mqttClient->Esp("#powerOn");
+    else
+        mqttClient->Esp("#powerOff");
+
+    function.refresh();
 }
 
 void mqttCallback(String &topic, String &payload) {
-    if (payload != nullptr && payload != "" && topic != mqttClient.getTopicEsp()) {
-        String mqttMsg = payload;
-        logger.wL("\n[MQTT][Recieve][Topic:%s]\n%s\n", topic.c_str(), mqttMsg.c_str());
-        if (topic == mqttClient.getTopicApp()) {
-            if (mqttMsg == "delete") {
-                function.MachineReset();
-            } else if (mqttMsg == "onApp") {
-                mqttClient.sendMessage(mqttClient.getTopicEsp(), "#onEsp", 2);
-                function.refresh("MQTT");
-                if (machineState)
-                    mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOn", 2);
-                else if (!machineState)
-                    mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOff", 2);
-            } else if (mqttMsg == "turnOn" || mqttMsg == "shutDown") {
-                power = true;
-                xSemaphoreGive(machinePwrNotify);
-            } else if (!isMsgProcessRunning) {
-                msgProcess("MQTT", mqttMsg);
-            }
-        } else if (topic == mqttClient.getTopicWifi()) {
-            if (mqttMsg.startsWith("A")) {
-                mqttMsg.remove(0, 1);
-                wifi.convertWifi(mqttMsg);
 
-            } else if (mqttMsg.startsWith("D")) {
-                mqttMsg.remove(0, 1);
-                wifi.removeWifi(mqttMsg);
-            }
+    String mqttMsg = payload;
+    logger.wL("\n[MQTT][Recieve][Topic:%s]\n%s\n", topic.c_str(), mqttMsg.c_str());
+    if (topic == mqttClient->getTopicApp()) {
+        if (mqttMsg == "delete") {
+            function.MachineReset();
+        } else if (mqttMsg == "onApp") {
+            mqttClient->Esp("#onEsp");
+            if (machineState)
+                mqttClient->Esp("#powerOn");
+            else if (!machineState)
+                mqttClient->Esp("#powerOff");
+            function.refresh("MQTT");
+        } else if (mqttMsg == "turnOn" || mqttMsg == "shutDown") {
+            power = true;
+            xSemaphoreGive(machinePwrNotify);
+        } else if (!isMsgProcessRunning) {
+            msgProcess("MQTT", mqttMsg);
+        }
+    } else if (topic == mqttClient->getTopicWifi()) {
+        if (mqttMsg.startsWith("A")) {
+            mqttMsg.remove(0, 1);
+            wifi.convertWifi(mqttMsg);
+
+        } else if (mqttMsg.startsWith("D")) {
+            mqttMsg.remove(0, 1);
+            wifi.removeWifi(mqttMsg);
         }
     }
-}
-
-void pairingFaild() {
-    logger.eL("Pairing Faild");
-    LedColor = 0;
-    // delay(1000);
-    function.MachineReset();
 }
 
 // local Setting
@@ -179,7 +172,7 @@ void MCUcommender(String target) {
     }
 
     if (target == "MQTT" || target == "")
-        mqttClient.sendMessage(mqttClient.getTopicEsp(), function.getInitialJson(), 2);
+        mqttClient->Esp(function.getInitialJson());
 }
 
 // TASK Setting
@@ -248,12 +241,7 @@ void timerTask(void *pvParam) {
 
             serializeJson(j_timer, timerBuf, sizeof(timerBuf));
             timerStr = timerBuf;
-
-            int qos = 0;
-            if (sendTimer) {
-                qos = 2;
-            }
-            mqttClient.sendMessage(mqttClient.getTopicTimer(), timerStr, qos);
+            mqttClient->Timer(timerStr);
             HMI.sendMessage("t" + timerStr);
 
             curTime = millis();
@@ -299,7 +287,7 @@ void dustTask(void *pvParam) {
             j_pms["rhum"] = rhumValStr;
 
             serializeJson(j_pms, pmsStr);
-            mqttClient.sendMessage(mqttClient.getTopicPms(), pmsStr, 0);
+            mqttClient->Pms(pmsStr);
             HMI.sendMessage("p" + pmsStr);
             pmsStr = "";
         }
@@ -358,7 +346,7 @@ void machinePwrTask(void *param) {
                     xSemaphoreGive(hmiNotify);
                     logger.iL("Machine TurnOn");
                     machineState = true;
-                    mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOn", 2);
+                    mqttClient->Esp("#powerOn");
                 } else if (!buttonState && machineState) {
                     function.commend("all", "state", "off");
                     digitalWrite(powerSupply, LOW);
@@ -368,7 +356,7 @@ void machinePwrTask(void *param) {
                     xSemaphoreTake(hmiNotify, portMAX_DELAY);
                     logger.iL("Machine ShutDown");
                     machineState = false;
-                    mqttClient.sendMessage(mqttClient.getTopicEsp(), "#powerOff", 2);
+                    mqttClient->Esp("#powerOff");
                 }
                 buttonPressed = false;
                 enableIntterrupt = true;
@@ -394,8 +382,13 @@ void machinePwrTask(void *param) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 void onWifiConnected() {
-    mqttClient.connectToMqtt(WiFi.SSID(), serialNum);
-    // HMI.sendMessage("w" + wifi.getInfo());
+    if (mqttClient == nullptr) {
+        mqttClient = new QueueMQTTClient(WiFi.SSID(), serialNum);
+        mqttClient->mqttCallback(mqttCallback);
+        mqttClient->onMqttConnect(onMqttConnect);
+        mqttClient->reset(reset);
+        mqttClient->connectToMqtt();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -417,12 +410,8 @@ void setup() {
     wifi.setWiFiConnectedCallback(onWifiConnected);
     wifi.connect();
     ///////////////////////////////////////
-    mqttClient.mqttCallback(mqttCallback);
-    mqttClient.onMqttConnect(onMqttConnect);
-    mqttClient.mqttPairingFaild(pairingFaild);
     HMI.SetCallback(HmiCallback);
     function.setMCUcommender(MCUcommender);
-    // OTAServer();
     ///////////////////////////////////////
     timerNotify = xSemaphoreCreateBinary();
     xSemaphoreTake(timerNotify, 0);
@@ -448,26 +437,13 @@ void loop() {
         if (c == '\n') {
             msgBuffer.trim();
             if (msgBuffer == "reset") {
-                digitalWrite(powerSupply, LOW);
-                LedColor = 0;
-                delay(1000);
-                function.MachineReset();
-            } else if (msgBuffer.startsWith("commend:")) {
-                msgBuffer.replace("commend:", "");
-                msgProcess("HMI", msgBuffer);
-            } else if (msgBuffer == "QOS0") {
-                mqttClient.sendMessage("test", "testMsg:QoS0", 0);
-            } else if (msgBuffer == "QOS1") {
-                mqttClient.sendMessage("test", "testMsg:QoS1", 1);
-            } else if (msgBuffer == "QOS2") {
-                mqttClient.sendMessage("test", "testMsg:QoS2", 2);
+                reset();
+            } else if (msgBuffer == "status") {
+                logger.iL(wifi.getInfo().c_str());
+                logger.iL(function.getInitialJson().c_str());
             } else if (msgBuffer.startsWith("!")) {
                 msgBuffer.remove(0, 1);
                 HmiCallback(msgBuffer);
-            } else if (msgBuffer.startsWith("?")) {
-                msgBuffer.remove(0, 1);
-                HMI.sendMessage(msgBuffer);
-                HMI.sendMessage("c" + function.getInitialJson());
             } else if (msgBuffer == "power") {
                 power = true;
                 xSemaphoreGive(machinePwrNotify);

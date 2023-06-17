@@ -28,15 +28,16 @@ void wifiController::connect() {
 }
 
 void wifiController::getSSID(int index) {
+
     int listLengh = j_wifiList.size();
 
     ssid = j_wifiList[index]["SSID"].as<String>();
     password = j_wifiList[index]["PASSWORD"].as<String>();
 
-    if (wifiIndex < listLengh)
+    if (wifiIndex < listLengh) {
         wifiIndex++;
-    else
-        wifiIndex = 0;
+        wifiIndex = wifiIndex % listLengh;
+    }
 }
 
 void wifiController::WiFiEvent(WiFiEvent_t event) {
@@ -86,7 +87,6 @@ void wifiController::wifiReconnect(void *parameter) {
             break;
         if (wifiReconnectCount > 5)
             instance->getSSID(instance->wifiIndex);
-        // delaytime = 60000;
         if (wifiReconnectCount == 50) {
             instance->wifiIndex = 0;
             WiFi.mode(WIFI_OFF);

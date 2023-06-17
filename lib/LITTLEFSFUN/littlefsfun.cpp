@@ -124,7 +124,7 @@ void removeDir(fs::FS &fs, const char *path) {
         // Serial.println("rmdir failed");
     }
 }
-
+/*
 String readFile(fs::FS &fs, const char *path) {
 //   Serial.printf("Reading file: %s\r\n", path);
 #ifdef ESP32
@@ -143,9 +143,46 @@ String readFile(fs::FS &fs, const char *path) {
     }
     file.close();
     //   Serial.println(fileContent);
+    if (file.close()) {
+        Serial.println("File closed successfully");
+    } else {
+        Serial.println("ERROR: Failed to close file");
+    }
+
+    return fileContent;
+}*/
+String readFile(fs::FS &fs, const char *path) {
+    Serial.printf("Reading file: %s\r\n", path);
+#ifdef ESP32
+    File file = fs.open(path);
+#else
+    File file = fs.open(path, FILE_READ);
+#endif
+    if (!file || file.isDirectory()) {
+        Serial.println("ERROR: Empty file or failed to open file");
+        return String();
+    }
+
+    // 检查文件是否可用
+    if (!file.available()) {
+        Serial.println("ERROR: File is not available");
+        file.close(); // 手动关闭文件
+        return String();
+    }
+
+    // 读取文件内容
+    String fileContent;
+    while (file.available()) {
+        fileContent += String((char)file.read());
+    }
+    file.close();
+
+    Serial.println("File closed successfully");
+
     return fileContent;
 }
-void writeFile(fs::FS &fs, const char *path, const char *message) {
+
+/*void writeFile(fs::FS &fs, const char *path, const char *message) {
     // Serial.printf("Writing file: %s\r\n", path);
 
     File file = fs.open(path, FILE_WRITE);
@@ -159,6 +196,25 @@ void writeFile(fs::FS &fs, const char *path, const char *message) {
         // } else {
         //     Serial.println("- write failed");
     }
+    file.close();
+}*/
+
+void writeFile(fs::FS &fs, const char *path, const char *message) {
+    Serial.printf("Writing file: %s\r\n", path);
+
+    File file = fs.open(path, FILE_WRITE);
+
+    if (!file) {
+        Serial.println("- failed to open file for writing");
+        return;
+    }
+
+    if (!file.print(message)) {
+        Serial.println("- write failed");
+    } else {
+        Serial.println("- write successful");
+    }
+
     file.close();
 }
 

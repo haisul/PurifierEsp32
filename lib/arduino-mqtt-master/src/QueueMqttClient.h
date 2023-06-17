@@ -8,9 +8,11 @@
 #include <QueueList.h>
 #include <WiFiClientSecure.h>
 
+#include "Pairing.h"
+
 #define MQTT_CALLBACK_SIGNATURE std::function<void(String & topic, String & payload)> MQTT_callback
 #define MQTT_ONCONNECT_SIGNATURE std::function<void()> MQTT_onConnect
-#define MQTT_PAIRINGFAILD_SIGNATURE std::function<void()> MQTT_pairingFaild
+#define RESET_SIGNATURE std::function<void()> MQTT_reset
 
 class QueueMQTTClient {
 private:
@@ -26,50 +28,51 @@ private:
     const char *MQTT_USERNAME = "LJ_IEP";
     const char *MQTT_PASSWORD = "33456789";
 
+    Pairing *pairing;
     MQTTClient mqttClient = MQTTClient(1024);
     WiFiClientSecure secureClient;
     QueueList QoS0_Queue, QoS1_Queue, QoS2_Queue;
 
     MQTT_CALLBACK_SIGNATURE;
     MQTT_ONCONNECT_SIGNATURE;
-    MQTT_PAIRINGFAILD_SIGNATURE;
-
-    bool deleteTopic = false;
-    bool isPairing = false;
+    RESET_SIGNATURE;
 
     uint32_t lastMsg = millis();
 
-    String serialNum;
-    String paireTopic;
+    String _serialNum;
+    String _ssid;
     String topicApp;
     String topicEsp, topicPms, topicTimer, topicWifi;
 
+    TaskHandle_t taskHandle1;
+
     bool loadCertFile();
-    bool loadTopic();
-    static void taskFunction(void *pvParam);
+
+    static void taskFunctionLoop(void *pvParam);
     void mqttLoop();
-    static void taskFunction2(void *pvParam);
-    void pairingTimer();
+
+    void pairingResult(bool);
+    void saveTopic(String);
 
 public:
-    bool pairingSuccess = true;
+    QueueMQTTClient(String, String);
+    ~QueueMQTTClient();
 
-    QueueMQTTClient();
-    void connectToMqtt(String SSID, String serialNum);
-    bool pairing(String step, String userId);
+    void connectToMqtt();
     void sendMessage(const String targetTopic, const String payload, int qos);
     QueueMQTTClient &mqttCallback(MQTT_CALLBACK_SIGNATURE);
     QueueMQTTClient &onMqttConnect(MQTT_ONCONNECT_SIGNATURE);
-    QueueMQTTClient &mqttPairingFaild(MQTT_PAIRINGFAILD_SIGNATURE);
-    void paireMassage(String &topic, String &payload);
+    QueueMQTTClient &reset(RESET_SIGNATURE);
     void subscribe(String &topic, int qos);
     void unSubscribe(String &topic);
+    bool pairingMsg(String, String);
+    bool loadTopic();
 
-    String getTopicEsp();
     String getTopicApp();
-    String getTopicPms();
-    String getTopicTimer();
     String getTopicWifi();
+    void Esp(String);
+    void Pms(String);
+    void Timer(String);
 };
 
 #endif

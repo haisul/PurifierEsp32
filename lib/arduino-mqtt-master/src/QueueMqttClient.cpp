@@ -1,6 +1,13 @@
 #include "QueueMqttClient.h"
 
-QueueMQTTClient::QueueMQTTClient() {}
+QueueMQTTClient::QueueMQTTClient(String ssid, String serialNum) : _ssid(ssid), _serialNum(serialNum) {}
+QueueMQTTClient::~QueueMQTTClient() {
+    mqttClient.~MQTTClient();
+    if (taskHandle1 != NULL) {
+        vTaskDelete(taskHandle1);
+        logger.wL("mqttLoop() is deleted!");
+    }
+}
 
 bool QueueMQTTClient::loadCertFile() {
     if (!initLittleFS()) {
@@ -25,40 +32,45 @@ bool QueueMQTTClient::loadCertFile() {
     return false;
 }
 
-void QueueMQTTClient::connectToMqtt(String SSID, String serialNum) {
-    this->paireTopic = SSID;
-    this->serialNum = serialNum;
+void QueueMQTTClient::connectToMqtt() {
 
     if (loadCertFile()) {
-        mqttClient.setOptions(10, false, 2000);
         logger.iL("MQTT connecting...");
+        mqttClient.setOptions(10, false, 2000);
         mqttClient.begin(MQTT_HOST, MQTT_PORT, secureClient);
         while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
             vTaskDelay(250);
         }
-        logger.iL("MQTT is connected");
+        logger.iL("connected broker:%s", MQTT_HOST);
+        QueueMQTTClient *params = this;
+        xTaskCreatePinnedToCore(taskFunctionLoop, "mqttLoop", 8192, (void *)params, 1, &taskHandle1, 1);
     }
 
     if (!loadTopic()) {
-        mqttClient.onMessage([this](String &topic, String &payload) {
-            this->paireMassage(topic, payload);
+        pairing = new Pairing(this, _serialNum, _ssid, 60);
+        pairing->resultCallback([this](bool result) {
+            this->pairingResult(result);
         });
-        pairingSuccess = false;
-        QueueMQTTClient *params = this;
-        xTaskCreatePinnedToCore(taskFunction2, "pairingTimer", 1024, (void *)params, 1, NULL, 1);
-        pairing("step1", "");
+        mqttClient.onMessage([this](String &topic, String &payload) {
+            pairing->pairingMassage(topic, payload);
+        });
+        pairing->start();
     } else {
         mqttClient.onMessage(MQTT_callback);
+        MQTT_onConnect();
     }
-
-    QueueMQTTClient *params = this;
-    xTaskCreatePinnedToCore(taskFunction, "mqttLoop", 8192, (void *)params, 1, NULL, 1);
 }
 
 bool QueueMQTTClient::loadTopic() {
-    String readTopicStr = readFile(LittleFS, "/initial/topic.txt");
+    if (!initLittleFS()) {
+        logger.eL("initial function data Failed!");
+        return false;
+    }
+
+    String readTopicStr = readFile(LittleFS, "/topic/topic.txt");
 
     StaticJsonDocument<512> doc;
+
     DeserializationError error = deserializeJson(doc, readTopicStr);
 
     if (error) {
@@ -72,60 +84,19 @@ bool QueueMQTTClient::loadTopic() {
     topicTimer = doc["topicTimer"].as<String>();
     topicWifi = doc["topicWifi"].as<String>();
 
-    logger.iL("\n%s\n%s\n%s\n%s", topicApp.c_str(), topicEsp.c_str(), topicPms.c_str(), topicTimer.c_str(), topicWifi.c_str());
+    if (topicApp != nullptr && topicEsp != nullptr && topicPms != nullptr && topicTimer != nullptr && topicWifi != nullptr)
+        logger.iL("\n%s\n%s\n%s\n%s", topicApp.c_str(), topicEsp.c_str(), topicPms.c_str(), topicTimer.c_str(), topicWifi.c_str());
+    else {
+        logger.eL("initial faild");
+        deleteFile(LittleFS, "/topic/topic.txt");
+    }
 
     subscribe(topicApp, 2);
     subscribe(topicWifi, 2);
 
     mqttClient.setWill(topicEsp.c_str(), "#disEsp", false, 2);
-
-    if (MQTT_onConnect) {
-        MQTT_onConnect(); // 調用回調函數
-    }
+    vTaskDelay(1000);
     return true;
-}
-
-bool QueueMQTTClient::pairing(String step, String userId) {
-
-    if (step == "step1") {
-        subscribe(paireTopic, 2);
-        sendMessage(paireTopic, serialNum, 2);
-        deleteTopic = true;
-        return true;
-    } else if (step == "step2" && userId != "") {
-        serialNum.replace("serialNum:", "");
-        userId.replace("userID:", "");
-        topicApp = userId + "/" + serialNum + "/app";
-        topicEsp = userId + "/" + serialNum + "/esp";
-        topicPms = userId + "/" + serialNum + "/pms";
-        topicTimer = userId + "/" + serialNum + "/timer";
-        topicWifi = userId + "/" + serialNum + "/wifi";
-
-        subscribe(topicApp, 2);
-        subscribe(topicWifi, 2);
-
-        StaticJsonDocument<384> j_topic;
-        j_topic["topicApp"] = userId + "/" + serialNum + "/app";
-        j_topic["topicEsp"] = userId + "/" + serialNum + "/esp";
-        j_topic["topicPms"] = userId + "/" + serialNum + "/pms";
-        j_topic["topicTimer"] = userId + "/" + serialNum + "/timer";
-        j_topic["topicWifi"] = userId + "/" + serialNum + "/wifi";
-
-        String topicStr;
-        serializeJson(j_topic, topicStr);
-        writeFile2(LittleFS, "/initial/topic.txt", topicStr.c_str());
-        sendMessage(paireTopic, "connected", 2);
-        while (!deleteTopic) {
-            vTaskDelay(250);
-        }
-
-        unSubscribe(paireTopic);
-
-        mqttClient.setWill(topicEsp.c_str(), "#disEsp", false, 2);
-        mqttClient.onMessage(MQTT_callback);
-        return true;
-    } else
-        return false;
 }
 
 void QueueMQTTClient::sendMessage(const String targetTopic, const String payload, int qos) {
@@ -154,6 +125,7 @@ void QueueMQTTClient::subscribe(String &topic, int qos) {
     } else {
         logger.eL("Subscribe %s Faild", topic.c_str());
     }
+    vTaskDelay(100);
 }
 
 void QueueMQTTClient::unSubscribe(String &topic) {
@@ -163,9 +135,10 @@ void QueueMQTTClient::unSubscribe(String &topic) {
     } else {
         logger.eL("unSubscribe %s Faild", topic.c_str());
     }
+    vTaskDelay(100);
 }
 
-void QueueMQTTClient::taskFunction(void *pvParam) {
+void QueueMQTTClient::taskFunctionLoop(void *pvParam) {
     QueueMQTTClient *instance = static_cast<QueueMQTTClient *>(pvParam);
     instance->mqttLoop();
     vTaskDelete(NULL);
@@ -180,21 +153,27 @@ void QueueMQTTClient::mqttLoop() {
     while (1) {
 
         if (!mqttClient.connected()) {
+            int i = 0;
             logger.eL("lastError:%d", mqttClient.lastError());
             while (!mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
+                if (i < 60 * 4)
+                    i++;
+                else
+                    break;
+
                 vTaskDelay(250);
             }
-            if (MQTT_onConnect) {
-                MQTT_onConnect(); // 調用回調函數
-            }
             logger.iL("MQqtt is ReConnected!");
-            uint16_t lastPacketID = mqttClient.lastPacketID();
-            mqttClient.prepareDuplicate(lastPacketID);
+            if (loadTopic()) {
+                MQTT_onConnect();
+                uint16_t lastPacketID = mqttClient.lastPacketID();
+                mqttClient.prepareDuplicate(lastPacketID);
+            } else {
+                break;
+            }
         }
         if (WiFi.status() != WL_CONNECTED) {
             logger.eL("Wifi disconnected");
-            mqttClient.disconnect();
-            logger.eL("Mqtt disconnected");
             break;
         }
 
@@ -232,43 +211,12 @@ void QueueMQTTClient::mqttLoop() {
             }
             lastMsg = millis();
         }
+
         mqttClient.loop();
+
         vTaskDelay(20);
     }
-}
-
-void QueueMQTTClient::taskFunction2(void *pvParam) {
-    QueueMQTTClient *instance = static_cast<QueueMQTTClient *>(pvParam);
-    instance->pairingTimer();
-    vTaskDelete(NULL);
-}
-
-void QueueMQTTClient::pairingTimer() {
-    uint8_t count = 0;
-    while (1) {
-        count++;
-        if (count > 90)
-            if (MQTT_pairingFaild)
-                MQTT_pairingFaild();
-        if (pairingSuccess)
-            break;
-        vTaskDelay(1000);
-    }
-    vTaskDelete(NULL);
-}
-
-void QueueMQTTClient::paireMassage(String &topic, String &payload) {
-    if (payload != nullptr && payload != "") {
-        String mqttMsg = "";
-        mqttMsg = payload;
-        if (topic == paireTopic && payload.startsWith("userID:") && !isPairing) {
-            isPairing = true;
-            logger.iL("Pairing...");
-            bool result = pairing("step2", mqttMsg);
-            if (result)
-                pairingSuccess = true;
-        }
-    }
+    delete this;
 }
 
 QueueMQTTClient &QueueMQTTClient::mqttCallback(MQTT_CALLBACK_SIGNATURE) {
@@ -281,23 +229,46 @@ QueueMQTTClient &QueueMQTTClient::onMqttConnect(MQTT_ONCONNECT_SIGNATURE) {
     return *this;
 };
 
-QueueMQTTClient &QueueMQTTClient::mqttPairingFaild(MQTT_PAIRINGFAILD_SIGNATURE) {
-    this->MQTT_pairingFaild = MQTT_pairingFaild;
+QueueMQTTClient &QueueMQTTClient::reset(RESET_SIGNATURE) {
+    this->MQTT_reset = MQTT_reset;
     return *this;
 };
 
-String QueueMQTTClient::getTopicEsp() {
-    return topicEsp;
-}
 String QueueMQTTClient::getTopicApp() {
     return topicApp;
 }
-String QueueMQTTClient::getTopicPms() {
-    return topicPms;
-}
-String QueueMQTTClient::getTopicTimer() {
-    return topicTimer;
-}
+
 String QueueMQTTClient::getTopicWifi() {
     return topicWifi;
+}
+
+void QueueMQTTClient::Esp(String msg) {
+    sendMessage(topicEsp, msg, 2);
+}
+
+void QueueMQTTClient::Pms(String msg) {
+    sendMessage(topicPms, msg, 0);
+}
+void QueueMQTTClient::Timer(String msg) {
+    sendMessage(topicTimer, msg, 2);
+}
+
+void QueueMQTTClient::pairingResult(bool result) {
+
+    if (result) {
+        saveTopic(pairing->getTopic());
+        // FIXME:這裡會當機
+        logger.eL("hello~~~~");
+        mqttClient.onMessage(MQTT_callback); // OK
+
+        MQTT_onConnect();
+    }
+}
+
+void QueueMQTTClient::saveTopic(String topicStr) {
+    writeFile2(LittleFS, "/topic/topic.txt", topicStr.c_str());
+}
+
+bool QueueMQTTClient::pairingMsg(String topic, String msg) {
+    return mqttClient.publish(topic, msg.c_str(), false, 2);
 }
