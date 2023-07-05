@@ -28,7 +28,7 @@ private:
     const char *MQTT_USERNAME = "LJ_IEP";
     const char *MQTT_PASSWORD = "33456789";
 
-    Pairing *pairing;
+    Pairing *pairing = nullptr;
     MQTTClient mqttClient = MQTTClient(1024);
     WiFiClientSecure secureClient;
     QueueList QoS0_Queue, QoS1_Queue, QoS2_Queue;
@@ -51,8 +51,10 @@ private:
     static void taskFunctionLoop(void *pvParam);
     void mqttLoop();
 
-    void pairingResult(bool);
+    void createPairingFunction();
+    void pairingResult(String);
     void saveTopic(String);
+    void removeTopic();
 
 public:
     QueueMQTTClient(String, String);
@@ -63,9 +65,9 @@ public:
     QueueMQTTClient &mqttCallback(MQTT_CALLBACK_SIGNATURE);
     QueueMQTTClient &onMqttConnect(MQTT_ONCONNECT_SIGNATURE);
     QueueMQTTClient &reset(RESET_SIGNATURE);
-    void subscribe(String &topic, int qos);
-    void unSubscribe(String &topic);
-    bool pairingMsg(String, String);
+    bool subscribe(String topic, int qos);
+    bool unSubscribe(String topic);
+
     bool loadTopic();
 
     String getTopicApp();

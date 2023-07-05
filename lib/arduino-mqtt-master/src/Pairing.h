@@ -1,13 +1,12 @@
 #ifndef PAIRING_H
 #define PAIRING_H
 
-#include "littlefsfun.h"
 #include "loggerESP.h"
 #include <ArduinoJson.h>
-// #include "QueueMqttClient.h"
+
 class QueueMQTTClient;
 
-#define RESULT_SIGNATURE std::function<void(bool)> result
+#define RESULT_SIGNATURE std::function<void(String)> result
 
 class Pairing {
 private:
@@ -26,18 +25,16 @@ private:
     bool onPairing = false;
     bool pairingSuccess = false;
 
-    TaskHandle_t taskHandle;
-    static void taskFunction(void *pvParam);
-    void pairingTimer();
+    TaskHandle_t pairingTimerHandle;
+    static void pairingTimer(void *pvParam);
 
 public:
     Pairing(QueueMQTTClient *, String, String, uint16_t);
     ~Pairing();
-
+    void test();
     bool start();
     bool recievePairingMessage(String);
     void pairingMassage(String &topic, String &payload);
-    String getTopic();
 
     Pairing &resultCallback(RESULT_SIGNATURE);
 };

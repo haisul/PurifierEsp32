@@ -1,24 +1,33 @@
 #include "Pairing.h"
 #include "QueueMqttClient.h"
+#include <exception>
 
 Pairing::Pairing(QueueMQTTClient *client, String serialNum, String topic, uint16_t time) : mqttClient(client), serialNum(serialNum), pairingTopic(topic), pairingTime(time) {
 }
 
 Pairing::~Pairing() {
-    if (taskHandle != NULL) {
-        vTaskDelete(taskHandle);
+    if (pairingTimerHandle != NULL) {
+        vTaskDelete(pairingTimerHandle);
         logger.wL("pairingTimer() is deleted!");
     }
     logger.wL("Pairing is deleted!");
 }
 
+void Pairing::test() {
+    try {
+        mqttClient->subscribe("000", 0);
+        mqttClient->subscribe("111", 1);
+        mqttClient->subscribe("222", 2);
+    } catch (const std::exception &e) {
+        Serial.println("Exception occurred: " + String(e.what()));
+    }
+}
+
 bool Pairing::start() {
     Pairing *params = this;
-    xTaskCreatePinnedToCore(taskFunction, "pairingTimer", 2048, (void *)params, 1, &taskHandle, 1);
-    // FIXME:這裡會斷線
+    xTaskCreatePinnedToCore(pairingTimer, "pairingTimer", 4096, (void *)params, 1, &pairingTimerHandle, 1);
     mqttClient->subscribe(pairingTopic, 2);
-    // mqttClient->sendMessage(pairingTopic, serialNum, 2);
-    mqttClient->pairingMsg(pairingTopic, serialNum);
+    mqttClient->sendMessage(pairingTopic, serialNum, 2);
     return true;
 }
 
@@ -38,56 +47,36 @@ bool Pairing::recievePairingMessage(String userId) {
     j_topic["topicWifi"] = userId + "/" + serialNum + "/wifi";
 
     serializeJson(j_topic, topicStr);
-
-    /*writeFile2(LittleFS, "/topic/topic.txt", topicStr.c_str());
-    logger.iL("Topic data is saved");
-    String readTopicStr = readFile(LittleFS, "/topic/topic.txt");
-    logger.iL("Topic data:\n%s", readTopicStr.c_str());*/
-    vTaskDelay(1000);
+    vTaskDelay(500);
     return true;
 }
 
-void Pairing::taskFunction(void *pvParam) {
+void Pairing::pairingTimer(void *pvParam) {
     Pairing *instance = static_cast<Pairing *>(pvParam);
-    instance->pairingTimer();
-    vTaskDelete(NULL);
-}
-
-void Pairing::pairingTimer() {
     while (1) {
-        counter++;
-        Serial.println(counter);
-        if (pairingSuccess) {
+        instance->counter++;
+        Serial.println(instance->counter);
+        if (instance->pairingSuccess) {
             logger.iL("paire Success");
-            result(true);
+            instance->result(instance->topicStr);
             break;
         }
-        if (counter > pairingTime) {
+        if (instance->counter > instance->pairingTime) {
             logger.eL("paire faild");
-            result(false);
             break;
         }
         vTaskDelay(1000);
     }
+    vTaskDelete(NULL);
 }
 
 void Pairing::pairingMassage(String &topic, String &payload) {
     if (!onPairing && topic == pairingTopic && payload.startsWith("userID:")) {
         onPairing = true;
-        mqttClient->unSubscribe(pairingTopic);
-        // mqttClient->sendMessage(pairingTopic, "connected", 2);
-        while (!mqttClient->pairingMsg(pairingTopic, "connected")) {
-            vTaskDelay(200);
-        }
         String mqttMsg = payload;
         counter = 0;
-        bool result = recievePairingMessage(mqttMsg);
-        pairingSuccess = result;
+        pairingSuccess = recievePairingMessage(mqttMsg);
     }
-}
-
-String Pairing::getTopic() {
-    return topicStr;
 }
 
 Pairing &Pairing::resultCallback(RESULT_SIGNATURE) {

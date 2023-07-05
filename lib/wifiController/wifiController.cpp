@@ -12,12 +12,9 @@ wifiController::wifiController() {
     xSemaphoreGive(reconnectMutex);
 }
 
-void wifiController::init() {
+void wifiController::connect() {
     if (loadWifiData())
         getSSID(wifiIndex);
-}
-
-void wifiController::connect() {
     if (ssid != nullptr && password != nullptr) {
         logger.iL("SSID: %s PASSWORD: %s", ssid.c_str(), password.c_str());
         WiFi.begin(ssid.c_str(), password.c_str());

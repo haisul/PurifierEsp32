@@ -34,7 +34,6 @@ private:
 
 public:
     wifiController();
-    void init();
     void addWifi(String SSID, String PASS);
     void removeWifi(String SSID);
     void convertWifi(String);

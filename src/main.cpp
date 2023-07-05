@@ -57,13 +57,6 @@ void buttonInterruptHandler() {
     xSemaphoreGive(machinePwrNotify);
 }
 
-void reset() {
-    digitalWrite(powerSupply, LOW);
-    LedColor = 0;
-    vTaskDelay(500);
-    function.MachineReset();
-}
-
 // MESSAGE PROCESS
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -114,9 +107,7 @@ void HmiCallback(String HMI_msg) {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 void onMqttConnect() {
-    mqttClient->loadTopic();
     logger.iL("Mqtt initial finished");
-
     mqttClient->Esp("#onEsp");
     if (machineState)
         mqttClient->Esp("#powerOn");
@@ -172,7 +163,8 @@ void MCUcommender(String target) {
     }
 
     if (target == "MQTT" || target == "")
-        mqttClient->Esp(function.getInitialJson());
+        if (mqttClient)
+            mqttClient->Esp(function.getInitialJson());
 }
 
 // TASK Setting
@@ -386,13 +378,19 @@ void onWifiConnected() {
         mqttClient = new QueueMQTTClient(WiFi.SSID(), serialNum);
         mqttClient->mqttCallback(mqttCallback);
         mqttClient->onMqttConnect(onMqttConnect);
-        mqttClient->reset(reset);
         mqttClient->connectToMqtt();
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
+
+void reset() {
+    digitalWrite(powerSupply, LOW);
+    LedColor = 0;
+    vTaskDelay(500);
+    function.MachineReset();
+}
 
 void setup() {
     Serial.begin(115200);
@@ -406,7 +404,6 @@ void setup() {
     pinMode(buttonPin, INPUT_PULLDOWN);
     attachInterrupt(digitalPinToInterrupt(buttonPin), buttonInterruptHandler, RISING);
     ///////////////////////////////////////
-    wifi.init();
     wifi.setWiFiConnectedCallback(onWifiConnected);
     wifi.connect();
     ///////////////////////////////////////
