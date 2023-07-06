@@ -233,7 +233,8 @@ void timerTask(void *pvParam) {
 
             serializeJson(j_timer, timerBuf, sizeof(timerBuf));
             timerStr = timerBuf;
-            mqttClient->Timer(timerStr);
+            if (mqttClient)
+                mqttClient->Timer(timerStr);
             HMI.sendMessage("t" + timerStr);
 
             curTime = millis();
@@ -279,7 +280,8 @@ void dustTask(void *pvParam) {
             j_pms["rhum"] = rhumValStr;
 
             serializeJson(j_pms, pmsStr);
-            mqttClient->Pms(pmsStr);
+            if (mqttClient)
+                mqttClient->Pms(pmsStr);
             HMI.sendMessage("p" + pmsStr);
             pmsStr = "";
         }
@@ -338,7 +340,8 @@ void machinePwrTask(void *param) {
                     xSemaphoreGive(hmiNotify);
                     logger.iL("Machine TurnOn");
                     machineState = true;
-                    mqttClient->Esp("#powerOn");
+                    if (mqttClient)
+                        mqttClient->Esp("#powerOn");
                 } else if (!buttonState && machineState) {
                     function.commend("all", "state", "off");
                     digitalWrite(powerSupply, LOW);
@@ -348,7 +351,8 @@ void machinePwrTask(void *param) {
                     xSemaphoreTake(hmiNotify, portMAX_DELAY);
                     logger.iL("Machine ShutDown");
                     machineState = false;
-                    mqttClient->Esp("#powerOff");
+                    if (mqttClient)
+                        mqttClient->Esp("#powerOff");
                 }
                 buttonPressed = false;
                 enableIntterrupt = true;

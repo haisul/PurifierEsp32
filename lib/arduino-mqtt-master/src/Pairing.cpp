@@ -13,16 +13,6 @@ Pairing::~Pairing() {
     logger.wL("Pairing is deleted!");
 }
 
-void Pairing::test() {
-    try {
-        mqttClient->subscribe("000", 0);
-        mqttClient->subscribe("111", 1);
-        mqttClient->subscribe("222", 2);
-    } catch (const std::exception &e) {
-        Serial.println("Exception occurred: " + String(e.what()));
-    }
-}
-
 bool Pairing::start() {
     Pairing *params = this;
     xTaskCreatePinnedToCore(pairingTimer, "pairingTimer", 4096, (void *)params, 1, &pairingTimerHandle, 1);

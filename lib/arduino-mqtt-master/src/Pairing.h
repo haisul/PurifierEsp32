@@ -31,7 +31,6 @@ private:
 public:
     Pairing(QueueMQTTClient *, String, String, uint16_t);
     ~Pairing();
-    void test();
     bool start();
     bool recievePairingMessage(String);
     void pairingMassage(String &topic, String &payload);
